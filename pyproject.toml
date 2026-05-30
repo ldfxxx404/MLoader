@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mloader"
+version = "0.1.0"
+description = "Desktop music downloader"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "PySide6>=6.11",
+    "requests>=2.34.2",
+    "beautifulsoup4>=4.12",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "ruff>=0.6",
+]
+
+[project.scripts]
+mloader = "mloader.app:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
