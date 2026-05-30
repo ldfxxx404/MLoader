@@ -1,0 +1,43 @@
+# Python bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+.venv/
+venv/
+env/
+mloader_venv/
+
+# Packaging/build artifacts
+build/
+dist/
+*.egg-info/
+*.egg
+
+# Test and tool caches
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# IDE/editor files
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Local environment/config
+.env
+.env.*
+*.local
+
+# Application output
+downloads/
+logs/
+*.log
