@@ -3,23 +3,34 @@ __pycache__/
 *.py[cod]
 *$py.class
 
+# Python/runtime
+.python-version
+
 # Virtual environments
 .venv/
 venv/
 env/
+ENV/
 mloader_venv/
 
 # Packaging/build artifacts
 build/
 dist/
+site/
 *.egg-info/
 *.egg
+pip-wheel-metadata/
 
 # Test and tool caches
 .pytest_cache/
 .ruff_cache/
 .mypy_cache/
+.pyre/
+.tox/
+.nox/
 .coverage
+.coverage.*
+coverage.xml
 htmlcov/
 
 # IDE/editor files
@@ -27,6 +38,7 @@ htmlcov/
 .vscode/
 *.swp
 *.swo
+*~
 
 # OS files
 .DS_Store
@@ -41,3 +53,11 @@ Thumbs.db
 downloads/
 logs/
 *.log
+
+# Local agent/tool state
+.agents/
+.codex/
+
+# Local packaging/deploy outputs
+*.spec
+*.manifest
