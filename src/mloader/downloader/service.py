@@ -174,7 +174,7 @@ class DownloaderService:
                     page_url=self._bandcamp_track_url(url, track),
                     file_url=file_url,
                     title=title,
-                    filename=self._bandcamp_filename(track, track_number, len(trackinfo) > 1),
+                    filename=self._bandcamp_filename(track, track_number, False),
                     artwork_url=artwork_url or None,
                     track_number=track_number,
                     album_title=album_title,

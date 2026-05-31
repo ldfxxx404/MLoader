@@ -37,8 +37,6 @@ class TrackCard(QtWidgets.QWidget):
         self._set_artwork(artwork)
 
         title = source.title
-        if source.track_number is not None:
-            title = f"{source.track_number:02d}. {title}"
 
         self.title_label = QtWidgets.QLabel(title)
         self.title_label.setObjectName("trackTitle")
