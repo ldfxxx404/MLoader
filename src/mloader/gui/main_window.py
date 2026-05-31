@@ -285,6 +285,14 @@ class MainWindow(QtWidgets.QMainWindow):
                 entry["card"].set_playing(False)
                 entry["card"].set_status("Ready")
             return
+
+        if state == 0:
+            for entry in self._track_cards:
+                entry["card"].set_playing(False)
+                entry["card"].set_status("Ready")
+            self._play_next()
+            return
+
         idx = self._player_service.playing_index
         if idx >= len(self._track_cards):
             return
@@ -293,6 +301,13 @@ class MainWindow(QtWidgets.QMainWindow):
         card.set_playing(is_playing)
         status_map = {0: "Ready", 1: "Playing", 2: "Paused"}
         card.set_status(status_map.get(state, "Ready"))
+
+    def _play_next(self) -> None:
+        current = self._player_service.playing_index
+        assert current is not None
+        next_index = current + 1
+        if next_index < len(self._sources):
+            self._player_service.toggle(self._sources[next_index].file_url, next_index)
 
     def closeEvent(self, event: QtGui.QCloseEvent) -> None:  # noqa: N802
         self._scan_service.stop()
