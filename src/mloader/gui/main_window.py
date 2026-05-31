@@ -1,7 +1,7 @@
 from pathlib import Path
 from typing import Any
 
-from PySide6 import QtCore, QtWidgets, QtGui
+from PySide6 import QtCore, QtGui, QtWidgets
 
 from mloader.downloader.service import DownloaderService, DownloadSource
 from mloader.gui.services.download_service import DownloadService
@@ -137,7 +137,6 @@ class MainWindow(QtWidgets.QMainWindow):
             self._set_status("Please wait for the current action to finish.")
             return
 
-        self._player_service.stop()
         self._clear_tracks()
         self.progress_bar.setValue(0)
         self._set_status("Scanning...")
@@ -271,6 +270,10 @@ class MainWindow(QtWidgets.QMainWindow):
         self.status_label.setText(status)
 
     def _on_playing_index_changed(self, index: int | None) -> None:
+        for entry in self._track_cards:
+            entry["card"].set_playing(False)
+            entry["card"].set_status("Ready")
+
         if index is not None and index < len(self._sources):
             self.player_bar.set_title(self._sources[index].title)
         else:
@@ -278,7 +281,18 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def _on_card_state_changed(self, state: int) -> None:
         if self._player_service.playing_index is None:
+            for entry in self._track_cards:
+                entry["card"].set_playing(False)
+                entry["card"].set_status("Ready")
             return
+
+        if state == 0:
+            for entry in self._track_cards:
+                entry["card"].set_playing(False)
+                entry["card"].set_status("Ready")
+            self._play_next()
+            return
+
         idx = self._player_service.playing_index
         if idx >= len(self._track_cards):
             return
@@ -287,6 +301,13 @@ class MainWindow(QtWidgets.QMainWindow):
         card.set_playing(is_playing)
         status_map = {0: "Ready", 1: "Playing", 2: "Paused"}
         card.set_status(status_map.get(state, "Ready"))
+
+    def _play_next(self) -> None:
+        current = self._player_service.playing_index
+        assert current is not None
+        next_index = current + 1
+        if next_index < len(self._sources):
+            self._player_service.toggle(self._sources[next_index].file_url, next_index)
 
     def closeEvent(self, event: QtGui.QCloseEvent) -> None:  # noqa: N802
         self._scan_service.stop()
