@@ -65,7 +65,11 @@ class DownloaderService:
 
         if self._is_bandcamp_url(clean_url):
             return self._resolve_bandcamp_sources(clean_url, status_callback)
-        return [DownloadSource(page_url=clean_url, file_url=clean_url, title=self._title_from_url(clean_url))]
+        return [
+            DownloadSource(
+                page_url=clean_url, file_url=clean_url, title=self._title_from_url(clean_url)
+            )
+        ]
 
     def download_source(
         self,
@@ -121,9 +125,7 @@ class DownloaderService:
         sources: list[DownloadSource],
     ) -> Path:
         album_titles = {
-            source.album_title
-            for source in sources
-            if source.is_album_track and source.album_title
+            source.album_title for source in sources if source.is_album_track and source.album_title
         }
         if len(album_titles) != 1:
             return base_dir
