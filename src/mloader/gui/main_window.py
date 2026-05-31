@@ -1,26 +1,26 @@
-from mloader.downloader.service import DownloadSource, DownloaderService
-from PySide6 import QtCore, QtGui, QtMultimedia, QtWidgets
 from pathlib import Path
 from typing import Any
-from mloader.downloader.download_worker import DownloadWorker
-from mloader.downloader.resolve_worker import ResolveWorker
+
+from PySide6 import QtCore, QtWidgets, QtGui
+
+from mloader.downloader.service import DownloaderService, DownloadSource
+from mloader.gui.services.download_service import DownloadService
+from mloader.gui.services.scan_service import ScanService
+from mloader.gui.widgets.player_bar import PlayerBar
+from mloader.gui.widgets.track_card import TrackCard
+from mloader.player.service import PlayerService
 
 
 class MainWindow(QtWidgets.QMainWindow):
     def __init__(self) -> None:
         super().__init__()
-        self._thread: QtCore.QThread | None = None
-        self._worker: QtCore.QObject | None = None
         self._downloader = DownloaderService()
         self._download_dir = self._downloader.download_dir
         self._sources: list[DownloadSource] = []
         self._track_cards: list[dict[str, Any]] = []
-        self._playing_index: int | None = None
-        self._is_seeking = False
-        self._audio_output = QtMultimedia.QAudioOutput(self)
-        self._player = QtMultimedia.QMediaPlayer(self)
-        self._player.setAudioOutput(self._audio_output)
-        self._audio_output.setVolume(0.8)
+        self._player_service = PlayerService(self)
+        self._scan_service = ScanService(self._downloader, self)
+        self._download_service = DownloadService(self._downloader, self)
 
         self.setWindowTitle("MLoader")
         self.resize(920, 620)
@@ -93,45 +93,38 @@ class MainWindow(QtWidgets.QMainWindow):
         self.progress_bar.setValue(0)
         self.progress_bar.setTextVisible(False)
 
-        self.player_title_label = QtWidgets.QLabel("No preview playing")
-        self.player_title_label.setObjectName("playerTitle")
-
-        self.player_time_label = QtWidgets.QLabel("0:00 / 0:00")
-        self.player_time_label.setObjectName("playerTime")
-        self.player_time_label.setAlignment(
-            QtCore.Qt.AlignmentFlag.AlignRight | QtCore.Qt.AlignmentFlag.AlignVCenter
-        )
-        self.player_time_label.setMinimumWidth(92)
-
-        self.seek_slider = QtWidgets.QSlider(QtCore.Qt.Orientation.Horizontal)
-        self.seek_slider.setRange(0, 0)
-        self.seek_slider.setEnabled(False)
-
-        player_layout = QtWidgets.QHBoxLayout()
-        player_layout.setSpacing(12)
-        player_layout.addWidget(self.player_title_label)
-        player_layout.addWidget(self.seek_slider, stretch=1)
-        player_layout.addWidget(self.player_time_label)
+        self.player_bar = PlayerBar(self._player_service)
 
         main_layout.addLayout(heading_layout)
         main_layout.addLayout(input_layout)
         main_layout.addLayout(destination_layout)
         main_layout.addWidget(self.status_label)
         main_layout.addWidget(self.queue_list, stretch=1)
-        main_layout.addLayout(player_layout)
+        main_layout.addWidget(self.player_bar)
         main_layout.addWidget(self.progress_bar)
+
+        self._player_service.playing_index_changed.connect(self._on_playing_index_changed)
+        self._player_service.playback_state_changed.connect(self._on_card_state_changed)
+        self._player_service.player_error.connect(self._on_player_error)
+
+        self._scan_service.scan_finished.connect(self._scan_finished)
+        self._scan_service.scan_failed.connect(self._scan_failed)
+        self._scan_service.status_changed.connect(self._set_status)
+
+        self._download_service.track_started.connect(
+            lambda index: self._set_selected_card_status(index, "Downloading")
+        )
+        self._download_service.track_progress_changed.connect(self._track_progress_changed)
+        self._download_service.total_progress_changed.connect(self.progress_bar.setValue)
+        self._download_service.status_changed.connect(self._set_status)
+        self._download_service.track_finished.connect(self._track_finished)
+        self._download_service.track_failed.connect(self._track_failed)
+        self._download_service.downloads_finished.connect(self._downloads_finished)
 
         self.scan_button.clicked.connect(self._scan_link)
         self.download_button.clicked.connect(self._download_selected)
         self.browse_button.clicked.connect(self._choose_download_dir)
         self.link_input.returnPressed.connect(self._scan_link)
-        self._player.playbackStateChanged.connect(self._playback_state_changed)
-        self._player.errorOccurred.connect(self._playback_error)
-        self._player.durationChanged.connect(self._duration_changed)
-        self._player.positionChanged.connect(self._position_changed)
-        self.seek_slider.sliderPressed.connect(self._seek_started)
-        self.seek_slider.sliderReleased.connect(self._seek_finished)
-        self.seek_slider.sliderMoved.connect(self._seek_moved)
 
     def _scan_link(self) -> None:
         url = self.link_input.text().strip()
@@ -140,33 +133,16 @@ class MainWindow(QtWidgets.QMainWindow):
             self.link_input.setFocus()
             return
 
-        if self._thread is not None:
+        if self._scan_service.is_busy or self._download_service.is_busy:
             self._set_status("Please wait for the current action to finish.")
             return
 
-        self._stop_playback()
+        self._player_service.stop()
         self._clear_tracks()
         self.progress_bar.setValue(0)
         self._set_status("Scanning...")
         self._set_busy(True, scanning=True)
-
-        thread = QtCore.QThread(self)
-        worker = ResolveWorker(self._downloader, url)
-        worker.moveToThread(thread)
-
-        thread.started.connect(worker.run)
-        worker.status_changed.connect(self._set_status)
-        worker.resolved.connect(self._scan_finished)
-        worker.failed.connect(self._scan_failed)
-        worker.resolved.connect(thread.quit)
-        worker.failed.connect(thread.quit)
-        thread.finished.connect(worker.deleteLater)
-        thread.finished.connect(thread.deleteLater)
-        thread.finished.connect(self._clear_worker)
-
-        self._thread = thread
-        self._worker = worker
-        thread.start()
+        self._scan_service.scan(url)
 
     def _scan_finished(self, previews: list[tuple[DownloadSource, bytes]]) -> None:
         self._sources = [source for source, _artwork in previews]
@@ -189,43 +165,24 @@ class MainWindow(QtWidgets.QMainWindow):
             self._set_status("Select at least one track.")
             return
 
-        if self._thread is not None:
+        if self._download_service.is_busy or self._scan_service.is_busy:
             self._set_status("Please wait for the current action to finish.")
             return
 
-        self._stop_playback()
+        self._player_service.stop()
         selected_sources = [self._sources[index] for index in selected_indexes]
-        for card_index, card in enumerate(self._track_cards):
-            card["checkbox"].setEnabled(False)
-            card["play"].setEnabled(False)
-            card["status"].setText("Waiting" if card_index in selected_indexes else "Skipped")
+        for card_index, entry in enumerate(self._track_cards):
+            entry["card"].set_enabled_controls(False)
+
+            if card_index in selected_indexes:
+                entry["card"].set_status("Waiting")
+            else:
+                entry["card"].set_status("Skipped")
 
         self.progress_bar.setValue(0)
         self._set_status("Downloading selected tracks...")
         self._set_busy(True, scanning=False)
-
-        thread = QtCore.QThread(self)
-        worker = DownloadWorker(self._downloader, selected_sources, self._download_dir)
-        worker.moveToThread(thread)
-
-        thread.started.connect(worker.run)
-        worker.status_changed.connect(self._set_status)
-        worker.track_started.connect(
-            lambda index: self._set_selected_card_status(index, "Downloading")
-        )
-        worker.track_progress_changed.connect(self._track_progress_changed)
-        worker.total_progress_changed.connect(self.progress_bar.setValue)
-        worker.track_finished.connect(self._track_finished)
-        worker.track_failed.connect(self._track_failed)
-        worker.finished.connect(self._downloads_finished)
-        worker.finished.connect(thread.quit)
-        thread.finished.connect(worker.deleteLater)
-        thread.finished.connect(thread.deleteLater)
-        thread.finished.connect(self._clear_worker)
-
-        self._thread = thread
-        self._worker = worker
-        thread.start()
+        self._download_service.download(selected_sources, self._download_dir)
 
     def _choose_download_dir(self) -> None:
         directory = QtWidgets.QFileDialog.getExistingDirectory(
@@ -243,110 +200,51 @@ class MainWindow(QtWidgets.QMainWindow):
         self._set_status("Done")
         self.progress_bar.setValue(100)
         self._set_busy(False)
-        for card in self._track_cards:
-            card["checkbox"].setEnabled(True)
-            card["play"].setEnabled(True)
+        for entry in self._track_cards:
+            entry["card"].set_enabled_controls(True)
         self.download_button.setEnabled(bool(self._sources))
 
     def _track_progress_changed(self, selected_index: int, progress: int) -> None:
         card_index = self._selected_indexes()[selected_index]
-        self._track_cards[card_index]["status"].setText(f"{progress}%")
+        self._track_cards[card_index]["card"].set_status(f"{progress}%")
 
     def _track_finished(self, selected_index: int, file_path: str) -> None:
         card_index = self._selected_indexes()[selected_index]
-        self._track_cards[card_index]["status"].setText("Saved")
-        self._track_cards[card_index]["detail"].setText(file_path)
+        card = self._track_cards[card_index]["card"]
+        card.set_status("Saved")
+        card.detail_label.setText(file_path)
 
     def _track_failed(self, selected_index: int, message: str) -> None:
         card_index = self._selected_indexes()[selected_index]
-        self._track_cards[card_index]["status"].setText("Failed")
-        self._track_cards[card_index]["detail"].setText(message)
+        card = self._track_cards[card_index]["card"]
+        card.set_status("Failed")
+        card.detail_label.setText(message)
 
     def _set_selected_card_status(self, selected_index: int, status: str) -> None:
         card_index = self._selected_indexes()[selected_index]
-        self._track_cards[card_index]["status"].setText(status)
+        self._track_cards[card_index]["card"].set_status(status)
 
     def _add_download_card(self, source: DownloadSource, artwork: bytes) -> None:
         if self.queue_list.count() == 1 and self.queue_list.item(0) is self._empty_item:
             self.queue_list.takeItem(0)
 
         item = QtWidgets.QListWidgetItem()
-        card = QtWidgets.QWidget()
-        card.setObjectName("downloadCard")
-
-        card_layout = QtWidgets.QHBoxLayout(card)
-        card_layout.setContentsMargins(12, 12, 12, 12)
-        card_layout.setSpacing(12)
-
-        checkbox = QtWidgets.QCheckBox()
-        checkbox.setChecked(True)
-
-        play_button = QtWidgets.QPushButton("Play")
-        play_button.setObjectName("playButton")
-        play_button.setFixedSize(58, 34)
-        play_button.setToolTip("Preview track")
-
-        artwork_label = QtWidgets.QLabel("♪")
-        artwork_label.setObjectName("artworkLabel")
-        artwork_label.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
-        artwork_label.setFixedSize(68, 68)
-        self._set_artwork(artwork_label, artwork)
-
-        title = source.title
-        if source.track_number is not None:
-            title = f"{source.track_number:02d}. {title}"
-
-        title_label = QtWidgets.QLabel(title)
-        title_label.setObjectName("trackTitle")
-        title_label.setTextInteractionFlags(QtCore.Qt.TextInteractionFlag.TextSelectableByMouse)
-
-        detail_label = QtWidgets.QLabel(source.page_url)
-        detail_label.setObjectName("trackUrl")
-        detail_label.setTextInteractionFlags(QtCore.Qt.TextInteractionFlag.TextSelectableByMouse)
-        detail_label.setWordWrap(True)
-
-        status_label = QtWidgets.QLabel("Ready")
-        status_label.setObjectName("trackStatus")
-        status_label.setAlignment(
-            QtCore.Qt.AlignmentFlag.AlignRight | QtCore.Qt.AlignmentFlag.AlignVCenter
-        )
-        status_label.setMinimumWidth(86)
-
-        text_layout = QtWidgets.QVBoxLayout()
-        text_layout.setContentsMargins(0, 0, 0, 0)
-        text_layout.setSpacing(6)
-        text_layout.addWidget(title_label)
-        text_layout.addWidget(detail_label)
-        text_layout.addStretch(1)
-
-        card_layout.addWidget(checkbox)
-        card_layout.addWidget(play_button)
-        card_layout.addWidget(artwork_label)
-        card_layout.addLayout(text_layout, stretch=1)
-        card_layout.addWidget(status_label)
+        index = len(self._track_cards)
+        card = TrackCard(source, artwork, index)
 
         item.setSizeHint(QtCore.QSize(0, 96))
         self.queue_list.addItem(item)
         self.queue_list.setItemWidget(item, card)
         self.queue_list.scrollToBottom()
 
-        card_index = len(self._track_cards)
-        play_button.clicked.connect(
-            lambda _checked=False, index=card_index: self._toggle_playback(index)
+        card.play_clicked.connect(
+            lambda idx=index: self._player_service.toggle(self._sources[idx].file_url, idx)
         )
 
-        self._track_cards.append(
-            {
-                "item": item,
-                "checkbox": checkbox,
-                "play": play_button,
-                "status": status_label,
-                "detail": detail_label,
-            }
-        )
+        self._track_cards.append({"item": item, "card": card})
 
     def _clear_tracks(self) -> None:
-        self._stop_playback()
+        self._player_service.stop()
         self.queue_list.clear()
         self._sources = []
         self._track_cards = []
@@ -355,116 +253,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.download_button.setEnabled(False)
 
     def _selected_indexes(self) -> list[int]:
-        return [
-            index for index, card in enumerate(self._track_cards) if card["checkbox"].isChecked()
-        ]
-
-    def _set_artwork(self, label: QtWidgets.QLabel, artwork: bytes) -> None:
-        if not artwork:
-            return
-
-        pixmap = QtGui.QPixmap()
-        if not pixmap.loadFromData(artwork):
-            return
-
-        scaled_pixmap = pixmap.scaled(
-            68,
-            68,
-            QtCore.Qt.AspectRatioMode.KeepAspectRatioByExpanding,
-            QtCore.Qt.TransformationMode.SmoothTransformation,
-        )
-        label.setPixmap(scaled_pixmap)
-
-    def _toggle_playback(self, index: int) -> None:
-        if index < 0 or index >= len(self._sources):
-            return
-
-        if self._playing_index == index:
-            if self._player.playbackState() == QtMultimedia.QMediaPlayer.PlaybackState.PlayingState:
-                self._player.pause()
-            else:
-                self._player.play()
-            return
-
-        self._reset_play_buttons()
-        self._playing_index = index
-        self._track_cards[index]["play"].setText("Pause")
-        self._track_cards[index]["status"].setText("Playing")
-        self.player_title_label.setText(self._sources[index].title)
-        self._player.setSource(QtCore.QUrl(self._sources[index].file_url))
-        self._player.play()
-
-    def _stop_playback(self) -> None:
-        self._player.stop()
-        self._player.setSource(QtCore.QUrl())
-        self._playing_index = None
-        self.player_title_label.setText("No preview playing")
-        self.seek_slider.setEnabled(False)
-        self.seek_slider.setRange(0, 0)
-        self.player_time_label.setText("0:00 / 0:00")
-        self._reset_play_buttons()
-
-    def _playback_state_changed(
-        self,
-        state: QtMultimedia.QMediaPlayer.PlaybackState,
-    ) -> None:
-        if self._playing_index is None or self._playing_index >= len(self._track_cards):
-            return
-
-        button = self._track_cards[self._playing_index]["play"]
-        status_label = self._track_cards[self._playing_index]["status"]
-        if state == QtMultimedia.QMediaPlayer.PlaybackState.PlayingState:
-            button.setText("Pause")
-            status_label.setText("Playing")
-        elif state == QtMultimedia.QMediaPlayer.PlaybackState.PausedState:
-            button.setText("Play")
-            status_label.setText("Paused")
-        else:
-            button.setText("Play")
-            if status_label.text() in {"Playing", "Paused"}:
-                status_label.setText("Ready")
-
-    def _playback_error(self, *_args: object) -> None:
-        if self._playing_index is not None and self._playing_index < len(self._track_cards):
-            self._track_cards[self._playing_index]["status"].setText("Preview failed")
-        self._playing_index = None
-        self.player_title_label.setText("Preview failed")
-        self._reset_play_buttons()
-
-    def _reset_play_buttons(self) -> None:
-        for card in self._track_cards:
-            card["play"].setText("Play")
-
-    def _duration_changed(self, duration: int) -> None:
-        self.seek_slider.setEnabled(duration > 0)
-        self.seek_slider.setRange(0, duration)
-        self._update_time_label(self._player.position(), duration)
-
-    def _position_changed(self, position: int) -> None:
-        if not self._is_seeking:
-            self.seek_slider.setValue(position)
-        self._update_time_label(position, self._player.duration())
-
-    def _seek_started(self) -> None:
-        self._is_seeking = True
-
-    def _seek_finished(self) -> None:
-        self._is_seeking = False
-        self._player.setPosition(self.seek_slider.value())
-
-    def _seek_moved(self, position: int) -> None:
-        self._update_time_label(position, self._player.duration())
-
-    def _update_time_label(self, position: int, duration: int) -> None:
-        self.player_time_label.setText(
-            f"{self._format_time(position)} / {self._format_time(duration)}"
-        )
-
-    def _format_time(self, value: int) -> str:
-        total_seconds = max(value, 0) // 1000
-        minutes = total_seconds // 60
-        seconds = total_seconds % 60
-        return f"{minutes}:{seconds:02d}"
+        return [i for i, entry in enumerate(self._track_cards) if entry["card"].is_selected()]
 
     def _set_busy(self, is_busy: bool, scanning: bool = False) -> None:
         self.link_input.setEnabled(not is_busy)
@@ -478,9 +267,38 @@ class MainWindow(QtWidgets.QMainWindow):
             self.scan_button.setText("Scan")
             self.download_button.setText("Download selected")
 
-    def _clear_worker(self) -> None:
-        self._thread = None
-        self._worker = None
-
     def _set_status(self, status: str) -> None:
         self.status_label.setText(status)
+
+    def _on_playing_index_changed(self, index: int | None) -> None:
+        if index is not None and index < len(self._sources):
+            self.player_bar.set_title(self._sources[index].title)
+        else:
+            self.player_bar.set_title("No preview playing")
+
+    def _on_card_state_changed(self, state: int) -> None:
+        if self._player_service.playing_index is None:
+            return
+        idx = self._player_service.playing_index
+        if idx >= len(self._track_cards):
+            return
+        card = self._track_cards[idx]["card"]
+        is_playing = state == 1
+        card.set_playing(is_playing)
+        status_map = {0: "Ready", 1: "Playing", 2: "Paused"}
+        card.set_status(status_map.get(state, "Ready"))
+
+    def closeEvent(self, event: QtGui.QCloseEvent) -> None:  # noqa: N802
+        self._scan_service.stop()
+        self._download_service.stop()
+        self._player_service.stop()
+        super().closeEvent(event)
+
+    def _on_player_error(self, _error: str) -> None:
+        if self._player_service.playing_index is not None:
+            idx = self._player_service.playing_index
+            if idx < len(self._track_cards):
+                card = self._track_cards[idx]["card"]
+                card.set_status("Preview failed")
+                card.set_playing(False)
+        self.player_bar.set_title("Preview failed")

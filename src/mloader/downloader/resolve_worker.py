@@ -1,7 +1,7 @@
+from PySide6 import QtCore
 import requests
 
-from mloader.downloader.service import DownloaderService, DownloadError
-from PySide6 import QtCore
+from mloader.downloader.service import DownloadError, DownloaderService
 
 
 class ResolveWorker(QtCore.QObject):
