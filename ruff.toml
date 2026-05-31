@@ -38,6 +38,7 @@ select = [
 ignore = [
     "E501",     # formatter handles line length
     "PLR0913",  # too many arguments
+    "PLR0915",  # too many statements
     "PLR2004",  # magic values
     "B008",     # function calls in defaults
     "TRY003",   # verbose exception messages
