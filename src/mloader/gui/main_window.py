@@ -1,7 +1,7 @@
 from pathlib import Path
 from typing import Any
 
-from PySide6 import QtCore, QtWidgets, QtGui
+from PySide6 import QtCore, QtGui, QtWidgets
 
 from mloader.downloader.service import DownloaderService, DownloadSource
 from mloader.gui.services.download_service import DownloadService
@@ -137,7 +137,6 @@ class MainWindow(QtWidgets.QMainWindow):
             self._set_status("Please wait for the current action to finish.")
             return
 
-        self._player_service.stop()
         self._clear_tracks()
         self.progress_bar.setValue(0)
         self._set_status("Scanning...")
