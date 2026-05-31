@@ -1,99 +1,9 @@
-from mloader.downloader.service import DownloadError, DownloadSource, DownloaderService
+from mloader.downloader.service import DownloadSource, DownloaderService
 from PySide6 import QtCore, QtGui, QtMultimedia, QtWidgets
 from pathlib import Path
 from typing import Any
-import requests
-
-class ResolveWorker(QtCore.QObject):
-    resolved = QtCore.Signal(object)
-    status_changed = QtCore.Signal(str)
-    failed = QtCore.Signal(str)
-
-    def __init__(self, service: DownloaderService, url: str) -> None:
-        super().__init__()
-        self._service = service
-        self._url = url
-
-    @QtCore.Slot()
-    def run(self) -> None:
-        try:
-            sources = self._service.resolve(self._url, self.status_changed.emit)
-            previews = [(source, self._load_artwork(source.artwork_url)) for source in sources]
-        except DownloadError as error:
-            self.failed.emit(str(error))
-            return
-        except Exception as error:
-            self.failed.emit(f"Unexpected error: {error}")
-            return
-
-        self.resolved.emit(previews)
-
-    def _load_artwork(self, artwork_url: str | None) -> bytes:
-        if not artwork_url:
-            return b""
-
-        try:
-            response = requests.get(artwork_url, timeout=20)
-            response.raise_for_status()
-        except requests.RequestException:
-            return b""
-
-        return response.content
-
-
-class DownloadWorker(QtCore.QObject):
-    track_started = QtCore.Signal(int)
-    track_progress_changed = QtCore.Signal(int, int)
-    total_progress_changed = QtCore.Signal(int)
-    status_changed = QtCore.Signal(str)
-    track_finished = QtCore.Signal(int, str)
-    track_failed = QtCore.Signal(int, str)
-    finished = QtCore.Signal()
-
-    def __init__(
-        self,
-        service: DownloaderService,
-        sources: list[DownloadSource],
-        download_dir: Path,
-    ) -> None:
-        super().__init__()
-        self._service = service
-        self._sources = sources
-        self._download_dir = download_dir
-
-    @QtCore.Slot()
-    def run(self) -> None:
-        total = len(self._sources)
-        target_dir = self._service.download_dir_for_sources(self._download_dir, self._sources)
-        for index, source in enumerate(self._sources):
-            self.track_started.emit(index)
-
-            try:
-                result = self._service.download_source(
-                    source,
-                    progress_callback=lambda progress, i=index: self._emit_track_progress(
-                        i,
-                        progress,
-                        total,
-                    ),
-                    status_callback=self.status_changed.emit,
-                    target_dir=target_dir,
-                )
-            except DownloadError as error:
-                self.track_failed.emit(index, str(error))
-                continue
-            except Exception as error:
-                self.track_failed.emit(index, f"Unexpected error: {error}")
-                continue
-
-            self.track_finished.emit(index, str(result.file_path))
-
-        self.total_progress_changed.emit(100)
-        self.finished.emit()
-
-    def _emit_track_progress(self, index: int, progress: int, total: int) -> None:
-        self.track_progress_changed.emit(index, progress)
-        self.total_progress_changed.emit(min(int((index + progress / 100) / total * 100), 100))
+from mloader.downloader.download_worker import DownloadWorker
+from mloader.downloader.resolve_worker import ResolveWorker
 
 
 class MainWindow(QtWidgets.QMainWindow):
@@ -156,7 +66,9 @@ class MainWindow(QtWidgets.QMainWindow):
 
         self.destination_label = QtWidgets.QLabel(str(self._download_dir))
         self.destination_label.setObjectName("destinationLabel")
-        self.destination_label.setTextInteractionFlags(QtCore.Qt.TextInteractionFlag.TextSelectableByMouse)
+        self.destination_label.setTextInteractionFlags(
+            QtCore.Qt.TextInteractionFlag.TextSelectableByMouse
+        )
 
         self.browse_button = QtWidgets.QPushButton("Choose folder")
         self.browse_button.setMinimumHeight(34)
@@ -298,7 +210,9 @@ class MainWindow(QtWidgets.QMainWindow):
 
         thread.started.connect(worker.run)
         worker.status_changed.connect(self._set_status)
-        worker.track_started.connect(lambda index: self._set_selected_card_status(index, "Downloading"))
+        worker.track_started.connect(
+            lambda index: self._set_selected_card_status(index, "Downloading")
+        )
         worker.track_progress_changed.connect(self._track_progress_changed)
         worker.total_progress_changed.connect(self.progress_bar.setValue)
         worker.track_finished.connect(self._track_finished)
@@ -417,7 +331,9 @@ class MainWindow(QtWidgets.QMainWindow):
         self.queue_list.scrollToBottom()
 
         card_index = len(self._track_cards)
-        play_button.clicked.connect(lambda _checked=False, index=card_index: self._toggle_playback(index))
+        play_button.clicked.connect(
+            lambda _checked=False, index=card_index: self._toggle_playback(index)
+        )
 
         self._track_cards.append(
             {
@@ -440,9 +356,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def _selected_indexes(self) -> list[int]:
         return [
-            index
-            for index, card in enumerate(self._track_cards)
-            if card["checkbox"].isChecked()
+            index for index, card in enumerate(self._track_cards) if card["checkbox"].isChecked()
         ]
 
     def _set_artwork(self, label: QtWidgets.QLabel, artwork: bytes) -> None:
