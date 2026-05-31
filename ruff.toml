@@ -1,0 +1,70 @@
+line-length = 100
+target-version = "py313"
+
+exclude = [
+    ".git",
+    ".venv",
+    "venv",
+    "__pycache__",
+    ".mypy_cache",
+    ".pytest_cache",
+    "build",
+    "dist",
+]
+
+[lint]
+select = [
+    "E",      # pycodestyle
+    "F",      # pyflakes
+    "I",      # isort
+    "B",      # flake8-bugbear
+    "UP",     # pyupgrade
+    "SIM",    # flake8-simplify
+    "C4",     # comprehensions
+    "PTH",    # pathlib
+    "RET",    # return checks
+    "TC",     # typing imports
+    "PT",     # pytest
+    "S",      # bandit
+    "PERF",   # performance
+    "ASYNC",  # async checks
+    "G",      # logging format
+    "N",      # pep8 naming
+    "RUF",    # ruff-specific
+    "PL",     # pylint
+    "ERA",    # commented code
+]
+
+ignore = [
+    "E501",     # formatter handles line length
+    "PLR0913",  # too many arguments
+    "PLR2004",  # magic values
+    "B008",     # function calls in defaults
+    "TRY003",   # verbose exception messages
+]
+
+fixable = ["ALL"]
+
+preview = true
+explicit-preview-rules = true
+
+[lint.per-file-ignores]
+"tests/**/*.py" = [
+    "S101",
+    "PLR2004",
+    "SLF001",
+]
+
+"__init__.py" = [
+    "F401",
+]
+
+[lint.isort]
+combine-as-imports = true
+force-sort-within-sections = true
+
+[format]
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+line-ending = "lf"
