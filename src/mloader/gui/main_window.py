@@ -194,7 +194,7 @@ class MainWindow(QtWidgets.QMainWindow):
             self._set_status("Please wait for the current action to finish.")
             return
 
-        self._stop_playback
+        self._stop_playback()
         selected_sources = [self._sources[index] for index in selected_indexes]
         for card_index, entry in enumerate(self._track_cards):
             entry["card"].set_enabled_controls(False)
@@ -333,7 +333,7 @@ class MainWindow(QtWidgets.QMainWindow):
                 self._player.play()
             return
 
-        self._reset_play_buttons
+        self._reset_play_buttons()
 
         self._playing_index = index
         card = self._track_cards[index]["card"]
@@ -353,7 +353,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.seek_slider.setEnabled(False)
         self.seek_slider.setRange(0, 0)
         self.player_time_label.setText("0:00 / 0:00")
-        self._reset_play_buttons
+        self._reset_play_buttons()
 
     def _playback_state_changed(
         self,
@@ -384,7 +384,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def _reset_play_buttons(self) -> None:
         for entry in self._track_cards:
-            entry["card"].set_text(False)
+            entry["card"].set_playing(False)
             entry["card"].set_status("Ready")
 
     def _duration_changed(self, duration: int) -> None:
