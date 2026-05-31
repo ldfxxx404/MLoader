@@ -191,7 +191,9 @@ class DownloaderService:
         if not isinstance(trackinfo, list) or not trackinfo:
             raise DownloadError("Bandcamp track list is empty.")
 
-        tracks = [cast("Mapping[str, Any]", track) for track in trackinfo if isinstance(track, dict)]
+        tracks = [
+            cast("Mapping[str, Any]", track) for track in trackinfo if isinstance(track, dict)
+        ]
         if not tracks:
             raise DownloadError("Bandcamp track data is invalid.")
         return tracks
