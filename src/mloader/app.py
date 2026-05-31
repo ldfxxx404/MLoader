@@ -1,6 +1,8 @@
-import sys
 from pathlib import Path
+import sys
+
 from PySide6.QtWidgets import QApplication
+
 from mloader.gui.main_window import MainWindow
 
 

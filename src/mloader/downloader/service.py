@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-import json
-import re
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from html import unescape
+import json
 from pathlib import Path
+import re
 from typing import Any, cast
 from urllib.parse import unquote, urlparse
 
@@ -191,7 +191,7 @@ class DownloaderService:
         if not isinstance(trackinfo, list) or not trackinfo:
             raise DownloadError("Bandcamp track list is empty.")
 
-        tracks = [cast(Mapping[str, Any], track) for track in trackinfo if isinstance(track, dict)]
+        tracks = [cast("Mapping[str, Any]", track) for track in trackinfo if isinstance(track, dict)]
         if not tracks:
             raise DownloadError("Bandcamp track data is invalid.")
         return tracks
@@ -296,7 +296,7 @@ class DownloaderService:
 
     def _embed_metadata(self, file_path: Path, source: DownloadSource) -> None:
         try:
-            from mutagen.id3 import APIC, TALB, TIT2, TRCK, ID3, ID3NoHeaderError
+            from mutagen.id3 import APIC, ID3, TALB, TIT2, TRCK, ID3NoHeaderError
             from mutagen.mp3 import MP3
         except ImportError:
             return

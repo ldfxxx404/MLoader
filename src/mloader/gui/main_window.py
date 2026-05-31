@@ -1,9 +1,11 @@
-from mloader.downloader.service import DownloadSource, DownloaderService
-from PySide6 import QtCore, QtGui, QtMultimedia, QtWidgets
 from pathlib import Path
 from typing import Any
+
+from PySide6 import QtCore, QtGui, QtMultimedia, QtWidgets
+
 from mloader.downloader.download_worker import DownloadWorker
 from mloader.downloader.resolve_worker import ResolveWorker
+from mloader.downloader.service import DownloaderService, DownloadSource
 from mloader.gui.widgets.track_card import TrackCard
 
 
