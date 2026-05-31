@@ -271,6 +271,10 @@ class MainWindow(QtWidgets.QMainWindow):
         self.status_label.setText(status)
 
     def _on_playing_index_changed(self, index: int | None) -> None:
+        for entry in self._track_cards:
+            entry["card"].set_playing(False)
+            entry["card"].set_status("Ready")
+
         if index is not None and index < len(self._sources):
             self.player_bar.set_title(self._sources[index].title)
         else:
@@ -278,6 +282,9 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def _on_card_state_changed(self, state: int) -> None:
         if self._player_service.playing_index is None:
+            for entry in self._track_cards:
+                entry["card"].set_playing(False)
+                entry["card"].set_status("Ready")
             return
         idx = self._player_service.playing_index
         if idx >= len(self._track_cards):
