@@ -28,6 +28,7 @@ class DownloadSource:
     track_number: int | None = None
     album_title: str | None = None
     is_album_track: bool = False
+    artist: str | None = None
 
 
 class DownloadError(Exception):
@@ -179,6 +180,7 @@ class DownloaderService:
                     track_number=track_number,
                     album_title=album_title,
                     is_album_track=is_album,
+                    artist=self._bandcamp_artist(tralbum_data, response.text)
                 )
             )
 
@@ -298,7 +300,7 @@ class DownloaderService:
 
     def _embed_metadata(self, file_path: Path, source: DownloadSource) -> None:
         try:
-            from mutagen.id3 import APIC, ID3, TALB, TIT2, TRCK, ID3NoHeaderError
+            from mutagen.id3 import APIC, ID3, TALB, TIT2, TRCK, TPE1, ID3NoHeaderError
             from mutagen.mp3 import MP3
         except ImportError:
             return
@@ -311,6 +313,10 @@ class DownloaderService:
 
             tags.delall("TIT2")
             tags.add(TIT2(encoding=3, text=source.title))
+            
+            if source.artist:
+                tags.delall("TPE1")
+                tags.add(TPE1(encoding=3, text=source.artist))
 
             if source.album_title:
                 tags.delall("TALB")
@@ -396,3 +402,13 @@ class DownloaderService:
     def _emit_status(self, callback: Callable[[str], None] | None, status: str) -> None:
         if callback is not None:
             callback(status)
+
+    def _bandcamp_artist(self, tralbum_data: Mapping[str, Any], html: str) -> str | None:
+        artist = tralbum_data.get("artist")
+        if isinstance(artist, str) and artist.strip():
+            return artist.strip()
+        
+        meta_title = self._extract_meta_property(html, "og:title")
+        if meta_title and " - " in meta_title:
+            return meta_title.split(" - ", 1)[0].strip()
+        return None
