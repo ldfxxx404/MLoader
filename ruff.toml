@@ -61,6 +61,10 @@ explicit-preview-rules = true
     "F401",
 ]
 
+"src/mloader/gui/main_window.py" = [
+    "PLR0911",  # too many return statements — eventFilter needs them
+]
+
 [lint.isort]
 combine-as-imports = true
 force-sort-within-sections = true

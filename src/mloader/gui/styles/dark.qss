@@ -157,6 +157,31 @@ QLabel#playerTime {
     font-size: 12px;
 }
 
+QLabel#releaseInfo {
+    color: #eff7ec;
+    font-size: 14px;
+    font-weight: 700;
+}
+
+QPushButton#volumeButton {
+    background: transparent;
+    border: 1px solid #334133;
+    border-radius: 4px;
+    color: #98a296;
+    font-size: 12px;
+    padding: 0;
+}
+
+QPushButton#volumeButton:hover {
+    border-color: #66E413;
+    color: #66E413;
+}
+
+QPushButton#volumeButton:checked {
+    color: #687468;
+    border-color: #1c271c;
+}
+
 QSlider::groove:horizontal {
     background: #172017;
     border-radius: 3px;

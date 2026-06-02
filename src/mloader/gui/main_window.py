@@ -21,6 +21,7 @@ class _CardEntry:
 class MainWindow(QtWidgets.QMainWindow):
     def __init__(self) -> None:
         super().__init__()
+        QtWidgets.QApplication.instance().installEventFilter(self)
         self._downloader = DownloaderService()
         self._download_dir = self._downloader.download_dir
         self._sources: list[DownloadSource] = []
@@ -86,8 +87,21 @@ class MainWindow(QtWidgets.QMainWindow):
         destination_layout.addWidget(self.destination_label, stretch=1)
         destination_layout.addWidget(self.browse_button)
 
+        self.release_info_label = QtWidgets.QLabel("")
+        self.release_info_label.setObjectName("releaseInfo")
+        self.release_info_label.setVisible(False)
+
+        self.select_all_button = QtWidgets.QPushButton("Select All")
+        self.select_all_button.setMinimumHeight(30)
+        self.select_all_button.setEnabled(False)
+
         self.status_label = QtWidgets.QLabel("Ready")
         self.status_label.setObjectName("statusLabel")
+
+        toolbar_layout = QtWidgets.QHBoxLayout()
+        toolbar_layout.setSpacing(12)
+        toolbar_layout.addWidget(self.select_all_button)
+        toolbar_layout.addWidget(self.status_label, stretch=1)
 
         self.queue_list = QtWidgets.QListWidget()
         self.queue_list.setSelectionMode(QtWidgets.QAbstractItemView.SelectionMode.NoSelection)
@@ -105,7 +119,8 @@ class MainWindow(QtWidgets.QMainWindow):
         main_layout.addLayout(heading_layout)
         main_layout.addLayout(input_layout)
         main_layout.addLayout(destination_layout)
-        main_layout.addWidget(self.status_label)
+        main_layout.addWidget(self.release_info_label)
+        main_layout.addLayout(toolbar_layout)
         main_layout.addWidget(self.queue_list, stretch=1)
         main_layout.addWidget(self.player_bar)
         main_layout.addWidget(self.progress_bar)
@@ -132,6 +147,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.download_button.clicked.connect(self._download_selected)
         self.browse_button.clicked.connect(self._choose_download_dir)
         self.link_input.returnPressed.connect(self._scan_link)
+        self.select_all_button.clicked.connect(self._toggle_select_all)
 
     def _scan_link(self) -> None:
         url = self.link_input.text().strip()
@@ -158,6 +174,13 @@ class MainWindow(QtWidgets.QMainWindow):
         count = len(self._sources)
         self._set_status(f"Found {count} track{'s' if count != 1 else ''}.")
         self.download_button.setEnabled(count > 0)
+
+        artist = self._sources[0].artist if self._sources else None
+        album = self._sources[0].album_title if self._sources else None
+        self._show_release_info(artist, album)
+
+        self.select_all_button.setEnabled(True)
+        self.select_all_button.setText("Deselect All")
         self._set_busy(False)
 
     def _scan_failed(self, message: str) -> None:
@@ -230,6 +253,27 @@ class MainWindow(QtWidgets.QMainWindow):
         card_index = self._selected_indexes()[selected_index]
         self._track_cards[card_index].card.set_status(status)
 
+    def _toggle_select_all(self) -> None:
+        if not self._track_cards:
+            return
+        all_selected = all(entry.card.is_selected() for entry in self._track_cards)
+        new_state = not all_selected
+        self.select_all_button.setText("Deselect All" if new_state else "Select All")
+        for entry in self._track_cards:
+            entry.card.checkbox.setChecked(new_state)
+
+    def _show_release_info(self, artist: str | None, album: str | None) -> None:
+        parts = []
+        if artist:
+            parts.append(artist)
+        if album:
+            parts.append(album)
+        if parts:
+            self.release_info_label.setText(" — ".join(parts))
+            self.release_info_label.setVisible(True)
+        else:
+            self.release_info_label.setVisible(False)
+
     def _add_download_card(self, source: DownloadSource, artwork: bytes) -> None:
         if self.queue_list.count() == 1 and self.queue_list.item(0) is self._empty_item:
             self.queue_list.takeItem(0)
@@ -257,6 +301,9 @@ class MainWindow(QtWidgets.QMainWindow):
         self._empty_item = QtWidgets.QListWidgetItem("Scan a link to show tracks here")
         self.queue_list.addItem(self._empty_item)
         self.download_button.setEnabled(False)
+        self.release_info_label.setVisible(False)
+        self.select_all_button.setText("Select All")
+        self.select_all_button.setEnabled(False)
 
     def _selected_indexes(self) -> list[int]:
         return [i for i, entry in enumerate(self._track_cards) if entry.card.is_selected()]
@@ -316,6 +363,45 @@ class MainWindow(QtWidgets.QMainWindow):
         next_index = current + 1
         if next_index < len(self._sources):
             self._player_service.toggle(self._sources[next_index].file_url, next_index)
+
+    def eventFilter(self, obj: QtCore.QObject, event: QtCore.QEvent) -> bool:  # noqa: N802
+        if event.type() == QtCore.QEvent.Type.KeyPress:
+            key = event.key()
+            focused = QtWidgets.QApplication.instance().focusWidget()
+            in_text_input = focused is not None and isinstance(focused, QtWidgets.QLineEdit)
+            is_button = isinstance(obj, QtWidgets.QAbstractButton)
+
+            if key == QtCore.Qt.Key.Key_Left and not in_text_input:
+                self._player_service.seek_relative(-20000)
+                return True
+            if key == QtCore.Qt.Key.Key_Right and not in_text_input:
+                self._player_service.seek_relative(20000)
+                return True
+            if key == QtCore.Qt.Key.Key_Up and not in_text_input:
+                self._player_service.set_volume(self._player_service.volume() + 10)
+                return True
+            if key == QtCore.Qt.Key.Key_Down and not in_text_input:
+                self._player_service.set_volume(self._player_service.volume() - 10)
+                return True
+            if key == QtCore.Qt.Key.Key_Space and not (in_text_input or is_button):
+                self._toggle_playback()
+                return True
+            if (
+                key == QtCore.Qt.Key.Key_A
+                and event.modifiers() == QtCore.Qt.KeyboardModifier.ControlModifier
+                and not in_text_input
+            ):
+                self._toggle_select_all()
+                return True
+
+        return super().eventFilter(obj, event)
+
+    def _toggle_playback(self) -> None:
+        idx = self._player_service.playing_index
+        if idx == -1 or idx >= len(self._sources):
+            return
+        url = self._sources[idx].file_url
+        self._player_service.toggle(url, idx)
 
     def closeEvent(self, event: QtGui.QCloseEvent) -> None:  # noqa: N802
         self._scan_service.stop()

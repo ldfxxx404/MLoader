@@ -6,6 +6,7 @@ class PlayerService(QtCore.QObject):
     playback_state_changed = QtCore.Signal(int)
     player_error = QtCore.Signal(str)
     position_changed = QtCore.Signal(int, int)
+    volume_changed = QtCore.Signal(int)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -52,6 +53,19 @@ class PlayerService(QtCore.QObject):
         self.playing_index = -1
         self.playing_index_changed.emit(-1)
         self.playback_state_changed.emit(0)
+
+    def set_volume(self, vol: int) -> None:
+        vol = max(0, min(100, vol))
+        self._audio_output.setVolume(vol / 100.0)
+        self.volume_changed.emit(vol)
+
+    def volume(self) -> int:
+        return round(self._audio_output.volume() * 100)
+
+    def seek_relative(self, delta_ms: int) -> None:
+        pos = self._player.position() + delta_ms
+        pos = max(0, min(pos, self._player.duration()))
+        self._player.setPosition(pos)
 
     def seek(self, position: int) -> None:
         self._player.setPosition(position)
