@@ -1,5 +1,4 @@
 from PySide6 import QtCore
-import requests
 
 from mloader.downloader.service import DownloadError, DownloaderService
 
@@ -18,7 +17,10 @@ class ResolveWorker(QtCore.QObject):
     def run(self) -> None:
         try:
             sources = self._service.resolve(self._url, self.status_changed.emit)
-            previews = [(source, self._load_artwork(source.artwork_url)) for source in sources]
+            previews = [
+                (source, self._service.download_artwork(source.artwork_url))
+                for source in sources
+            ]
         except DownloadError as error:
             self.failed.emit(str(error))
             return
@@ -27,15 +29,3 @@ class ResolveWorker(QtCore.QObject):
             return
 
         self.resolved.emit(previews)
-
-    def _load_artwork(self, artwork_url: str | None) -> bytes:
-        if not artwork_url:
-            return b""
-
-        try:
-            response = requests.get(artwork_url, timeout=20)
-            response.raise_for_status()
-        except requests.RequestException:
-            return b""
-
-        return response.content
