@@ -9,6 +9,7 @@ class PlayerBar(QtWidgets.QWidget):
         self._player_service = player_service
         self._is_seeking = False
         self._cached_duration = 0
+        self._cached_volume = self._player_service.volume()
 
         layout = QtWidgets.QHBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -74,7 +75,7 @@ class PlayerBar(QtWidgets.QWidget):
             self._cached_volume = self.volume_slider.value()
             self._player_service.set_volume(0)
         else:
-            self._player_service.set_volume(50)
+            self._player_service.set_volume(self._cached_volume)
 
     def _on_position_changed(self, position: int, duration: int) -> None:
         self._cached_duration = duration

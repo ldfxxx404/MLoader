@@ -1,4 +1,8 @@
+import logging
+
 from PySide6 import QtCore, QtMultimedia
+
+log = logging.getLogger(__name__)
 
 
 class PlayerService(QtCore.QObject):
@@ -68,6 +72,7 @@ class PlayerService(QtCore.QObject):
         self._player.setPosition(pos)
 
     def seek(self, position: int) -> None:
+        position = max(0, min(position, self._player.duration()))
         self._player.setPosition(position)
 
     def _on_state_changed(self, state: QtMultimedia.QMediaPlayer.PlaybackState) -> None:

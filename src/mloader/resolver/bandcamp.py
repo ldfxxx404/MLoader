@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from html import unescape
 import json
+import logging
 import re
 from typing import TYPE_CHECKING, Any, cast
 from urllib.parse import urlparse
@@ -13,7 +14,9 @@ import requests
 
 from mloader.models import DownloadError, DownloadSource
 from mloader.resolver.base import SourceResolver
-from mloader.utils import safe_filename
+from mloader.utils import USER_AGENT, safe_filename
+
+log = logging.getLogger(__name__)
 
 
 class BandcampResolver(SourceResolver):
@@ -31,10 +34,12 @@ class BandcampResolver(SourceResolver):
         self,
         url: str,
     ) -> list[DownloadSource]:
+        log.info("Resolving Bandcamp URL: %s", url)
         try:
-            response = requests.get(url, timeout=30)
+            response = requests.get(url, timeout=30, headers={"User-Agent": USER_AGENT})
             response.raise_for_status()
         except requests.RequestException as error:
+            log.error("Bandcamp request failed: %s", error)
             raise DownloadError(str(error)) from error
 
         raw_tralbum = self._extract_data_attribute(response.text, "data-tralbum")
@@ -75,7 +80,9 @@ class BandcampResolver(SourceResolver):
             )
 
         if not sources:
+            log.warning("No downloadable MP3 streams found for %s", url)
             raise DownloadError("No downloadable Bandcamp MP3 streams were found.")
+        log.info("Resolved %d tracks from %s", len(sources), url)
         return sources
 
     @staticmethod

@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+import logging
 from pathlib import Path
 
 from PySide6 import QtCore, QtGui, QtWidgets
@@ -10,6 +11,8 @@ from mloader.gui.widgets.player_bar import PlayerBar
 from mloader.gui.widgets.track_card import TrackCard
 from mloader.models import DownloadSource
 from mloader.player.service import PlayerService
+
+log = logging.getLogger(__name__)
 
 
 @dataclass

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from typing import TYPE_CHECKING
 from urllib.parse import unquote, urlparse
@@ -12,7 +13,9 @@ import requests
 from mloader.models import DownloadError, DownloadResult, DownloadSource
 from mloader.resolver.bandcamp import BandcampResolver
 from mloader.resolver.registry import GenericResolver, ResolverRegistry
-from mloader.utils import safe_filename
+from mloader.utils import USER_AGENT, safe_filename
+
+log = logging.getLogger(__name__)
 
 
 class DownloaderService:
@@ -60,7 +63,13 @@ class DownloaderService:
         self._emit_status(status_callback, "Connecting...")
 
         try:
-            with requests.get(source.file_url, stream=True, timeout=30) as response:
+            log.info("Downloading %s", source.file_url)
+            with requests.get(
+                source.file_url,
+                stream=True,
+                timeout=(10, 30),
+                headers={"User-Agent": USER_AGENT},
+            ) as response:
                 response.raise_for_status()
 
                 file_path = self._build_file_path(
@@ -84,9 +93,13 @@ class DownloaderService:
                         if total_size and progress_callback is not None:
                             progress_callback(min(int(downloaded_size / total_size * 100), 100))
 
+            log.info("Saved %s (%d bytes)", file_path, downloaded_size)
+
         except requests.RequestException as error:
+            log.error("Download failed: %s", error)
             raise DownloadError(str(error)) from error
         except OSError as error:
+            log.error("File write failed: %s", error)
             raise DownloadError(str(error)) from error
 
         self._embed_metadata(file_path, source)
@@ -133,18 +146,24 @@ class DownloaderService:
         stem = file_path.stem
         suffix = file_path.suffix
         counter = 2
-        while True:
+        while counter <= 1000:
             candidate = download_dir / f"{stem}-{counter}{suffix}"
             if not candidate.exists():
                 return candidate
             counter += 1
+        raise DownloadError(f"Too many filename collisions for {stem}{suffix}")
 
     def _embed_metadata(self, file_path: Path, source: DownloadSource) -> None:
+        if file_path.suffix.lower() != ".mp3":
+            log.debug("Skipping metadata embedding for non-MP3 file: %s", file_path)
+            return
+
         try:
             from mutagen import MutagenError
             from mutagen.id3 import APIC, ID3, TALB, TIT2, TPE1, TRCK, ID3NoHeaderError
             from mutagen.mp3 import MP3
         except ImportError:
+            log.debug("mutagen not available, skipping metadata embedding")
             return
 
         try:
@@ -183,19 +202,26 @@ class DownloaderService:
 
             tags.save(file_path, v2_version=3)
             MP3(file_path).save()
-        except (MutagenError, OSError):
-            return
+            log.debug("Metadata embedded in %s", file_path)
+        except (MutagenError, OSError) as meta_error:
+            log.warning("Failed to embed metadata in %s: %s", file_path, meta_error)
 
     def download_artwork(self, artwork_url: str | None) -> bytes:
         if not artwork_url:
             return b""
 
         try:
-            response = requests.get(artwork_url, timeout=20)
+            response = requests.get(
+                artwork_url,
+                timeout=20,
+                headers={"User-Agent": USER_AGENT},
+            )
             response.raise_for_status()
-        except requests.RequestException:
+        except requests.RequestException as error:
+            log.debug("Artwork download failed: %s", error)
             return b""
 
+        log.debug("Artwork downloaded (%d bytes)", len(response.content))
         return response.content
 
     def _artwork_mime_type(self, artwork: bytes) -> str:
@@ -207,6 +233,11 @@ class DownloaderService:
 
     def _filename_from_content_disposition(self, header: str) -> str:
         parts = [part.strip() for part in header.split(";")]
+        for part in parts:
+            lower = part.lower()
+            if lower.startswith("filename*=utf-8''"):
+                raw = part.split("=", 1)[1].removeprefix("UTF-8''").removeprefix("utf-8''")
+                return unquote(raw.strip("\"'"))
         for part in parts:
             if part.lower().startswith("filename="):
                 return Path(part.split("=", 1)[1].strip("\"'")).name

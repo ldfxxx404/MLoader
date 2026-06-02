@@ -1,3 +1,4 @@
+import logging
 from pathlib import Path
 
 from PySide6 import QtCore
@@ -5,6 +6,8 @@ from PySide6 import QtCore
 from mloader.downloader.download_worker import DownloadWorker
 from mloader.downloader.service import DownloaderService
 from mloader.models import DownloadSource
+
+log = logging.getLogger(__name__)
 
 
 class DownloadService(QtCore.QObject):
@@ -28,6 +31,7 @@ class DownloadService(QtCore.QObject):
 
     def download(self, sources: list[DownloadSource], download_dir: Path) -> None:
         if self._thread is not None:
+            log.warning("Download already in progress, ignoring")
             return
 
         thread = QtCore.QThread(self)
@@ -50,11 +54,15 @@ class DownloadService(QtCore.QObject):
         self._thread = thread
         self._worker = worker
         thread.start()
+        log.info("Download started: %d sources", len(sources))
 
     def stop(self) -> None:
         if self._thread is not None:
             self._thread.quit()
-            self._thread.wait(5000)
+            if not self._thread.wait(5000):
+                log.warning("Download thread did not finish in time, terminating")
+                self._thread.terminate()
+                self._thread.wait()
             self._clear()
 
     def _on_worker_status(self, status: str) -> None:

@@ -1,7 +1,11 @@
+import logging
+
 from PySide6 import QtCore
 
 from mloader.downloader.resolve_worker import ResolveWorker
 from mloader.downloader.service import DownloaderService
+
+log = logging.getLogger(__name__)
 
 
 class ScanService(QtCore.QObject):
@@ -21,6 +25,7 @@ class ScanService(QtCore.QObject):
 
     def scan(self, url: str) -> None:
         if self._thread is not None:
+            log.warning("Scan already in progress, ignoring %s", url)
             return
 
         thread = QtCore.QThread(self)
@@ -40,11 +45,15 @@ class ScanService(QtCore.QObject):
         self._thread = thread
         self._worker = worker
         thread.start()
+        log.info("Scan started: %s", url)
 
     def stop(self) -> None:
         if self._thread is not None:
             self._thread.quit()
-            self._thread.wait(5000)
+            if not self._thread.wait(5000):
+                log.warning("Scan thread did not finish in time, terminating")
+                self._thread.terminate()
+                self._thread.wait()
             self._clear()
 
     def _on_worker_resolved(self, previews: object) -> None:

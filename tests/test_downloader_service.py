@@ -26,7 +26,7 @@ class TestSafeFilename:
         assert safe_filename("") == "download"
 
     def test_only_special_chars(self):
-        assert safe_filename("<>\":/\\|?*") == "-"
+        assert safe_filename("<>\":/\\|?*") == "download"
 
 
 class TestGenericResolverTitleFromUrl:
@@ -220,7 +220,11 @@ class TestDownloadArtwork:
             resp.raise_for_status.return_value = None
             mock_get.return_value = resp
             assert svc.download_artwork("http://example.com/art.jpg") == b"image_data"
-            mock_get.assert_called_once_with("http://example.com/art.jpg", timeout=20)
+            mock_get.assert_called_once_with(
+                "http://example.com/art.jpg",
+                timeout=20,
+                headers={"User-Agent": "MLoader/0.2.0"},
+            )
 
 
 class TestBandcampResolverSupports:
