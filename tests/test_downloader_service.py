@@ -5,7 +5,8 @@ from unittest.mock import Mock, patch
 import pytest
 import requests
 
-from mloader.downloader.service import DownloadError, DownloaderService, DownloadSource
+from mloader.downloader.service import DownloaderService
+from mloader.models import DownloadError, DownloadSource
 
 
 class TestValidateUrl:

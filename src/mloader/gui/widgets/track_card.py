@@ -1,6 +1,6 @@
 from PySide6 import QtCore, QtGui, QtWidgets
 
-from mloader.downloader.service import DownloadSource
+from mloader.models import DownloadSource
 
 
 class TrackCard(QtWidgets.QWidget):

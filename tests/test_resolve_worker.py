@@ -1,7 +1,7 @@
 from unittest.mock import Mock
 
 from mloader.downloader.resolve_worker import ResolveWorker
-from mloader.downloader.service import DownloadError
+from mloader.models import DownloadError
 
 
 class TestRun:

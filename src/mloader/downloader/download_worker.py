@@ -2,7 +2,8 @@ from pathlib import Path
 
 from PySide6 import QtCore
 
-from mloader.downloader.service import DownloadError, DownloaderService, DownloadSource
+from mloader.downloader.service import DownloaderService
+from mloader.models import DownloadError, DownloadSource
 
 
 class DownloadWorker(QtCore.QObject):

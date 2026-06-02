@@ -4,7 +4,7 @@ from types import SimpleNamespace
 from unittest.mock import Mock
 
 from mloader.downloader.download_worker import DownloadWorker
-from mloader.downloader.service import DownloadError
+from mloader.models import DownloadError
 
 
 class TestRun:

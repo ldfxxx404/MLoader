@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 from html import unescape
 import json
 from pathlib import Path
@@ -13,28 +12,7 @@ if TYPE_CHECKING:
 
 import requests
 
-
-@dataclass(frozen=True)
-class DownloadResult:
-    url: str
-    file_path: Path
-
-
-@dataclass(frozen=True)
-class DownloadSource:
-    page_url: str
-    file_url: str
-    title: str
-    filename: str | None = None
-    artwork_url: str | None = None
-    track_number: int | None = None
-    album_title: str | None = None
-    is_album_track: bool = False
-    artist: str | None = None
-
-
-class DownloadError(Exception):
-    """Raised when a download cannot be completed."""
+from mloader.models import DownloadError, DownloadResult, DownloadSource
 
 
 class DownloaderService:

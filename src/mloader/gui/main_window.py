@@ -3,11 +3,12 @@ from pathlib import Path
 
 from PySide6 import QtCore, QtGui, QtWidgets
 
-from mloader.downloader.service import DownloaderService, DownloadSource
+from mloader.downloader.service import DownloaderService
 from mloader.gui.services.download_service import DownloadService
 from mloader.gui.services.scan_service import ScanService
 from mloader.gui.widgets.player_bar import PlayerBar
 from mloader.gui.widgets.track_card import TrackCard
+from mloader.models import DownloadSource
 from mloader.player.service import PlayerService
 
 
