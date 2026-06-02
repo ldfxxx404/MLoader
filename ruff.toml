@@ -42,6 +42,7 @@ ignore = [
     "PLR2004",  # magic values
     "B008",     # function calls in defaults
     "TRY003",   # verbose exception messages
+    "PLC0415",  # import inside function — intentional for optional deps
 ]
 
 fixable = ["ALL"]

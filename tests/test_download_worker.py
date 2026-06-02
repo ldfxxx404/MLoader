@@ -1,4 +1,5 @@
 from pathlib import Path
+from tempfile import gettempdir
 from types import SimpleNamespace
 from unittest.mock import Mock
 
@@ -10,9 +11,10 @@ class TestRun:
     def test_success(self):
         service = Mock()
         source = Mock()
+        tmpdir = gettempdir()
 
-        service.download_dir_for_sources.return_value = Path("/tmp")
-        service.download_source.return_value = SimpleNamespace(file_path=Path("/tmp/music/abc.mp3"))
+        service.download_dir_for_sources.return_value = Path(tmpdir)
+        service.download_source.return_value = SimpleNamespace(file_path=Path(tmpdir) / "music" / "abc.mp3")
 
         worker = DownloadWorker(
             service=service,
@@ -28,14 +30,15 @@ class TestRun:
 
         worker.run()
 
-        track_finished.assert_called_once_with(0, "/tmp/music/abc.mp3")
+        track_finished.assert_called_once_with(0, str(Path(tmpdir) / "music" / "abc.mp3"))
         finished.assert_called_once()
 
     def test_fail(self):
         service = Mock()
         source = Mock()
+        tmpdir = gettempdir()
 
-        service.download_dir_for_sources.return_value = Path("/tmp")
+        service.download_dir_for_sources.return_value = Path(tmpdir)
         service.download_source.side_effect = DownloadError("error")
 
         worker = DownloadWorker(

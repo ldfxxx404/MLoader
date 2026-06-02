@@ -304,7 +304,8 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def _play_next(self) -> None:
         current = self._player_service.playing_index
-        assert current is not None
+        if current is None:
+            return
         next_index = current + 1
         if next_index < len(self._sources):
             self._player_service.toggle(self._sources[next_index].file_url, next_index)

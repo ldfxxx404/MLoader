@@ -1,13 +1,15 @@
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from html import unescape
 import json
 from pathlib import Path
 import re
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
 from urllib.parse import unquote, urlparse
+
+if TYPE_CHECKING:
+    from collections.abc import Callable, Mapping
 
 import requests
 
@@ -300,7 +302,7 @@ class DownloaderService:
 
     def _embed_metadata(self, file_path: Path, source: DownloadSource) -> None:
         try:
-            from mutagen.id3 import APIC, ID3, TALB, TIT2, TRCK, TPE1, ID3NoHeaderError
+            from mutagen.id3 import APIC, ID3, TALB, TIT2, TPE1, TRCK, ID3NoHeaderError
             from mutagen.mp3 import MP3
         except ImportError:
             return
