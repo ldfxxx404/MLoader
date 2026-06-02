@@ -1,10 +1,7 @@
 from __future__ import annotations
 
-from html import unescape
-import json
 from pathlib import Path
-import re
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING
 from urllib.parse import unquote, urlparse
 
 if TYPE_CHECKING:
@@ -13,11 +10,17 @@ if TYPE_CHECKING:
 import requests
 
 from mloader.models import DownloadError, DownloadResult, DownloadSource
+from mloader.resolver.bandcamp import BandcampResolver
+from mloader.resolver.registry import GenericResolver, ResolverRegistry
+from mloader.utils import safe_filename
 
 
 class DownloaderService:
     def __init__(self, download_dir: Path | None = None) -> None:
         self.download_dir = download_dir or Path.home() / "Downloads" / "MLoader"
+        self._registry = ResolverRegistry()
+        self._registry.register(BandcampResolver())
+        self._registry.register(GenericResolver())
 
     def download(
         self,
@@ -43,14 +46,7 @@ class DownloaderService:
     ) -> list[DownloadSource]:
         clean_url = url.strip()
         self._validate_url(clean_url)
-
-        if self._is_bandcamp_url(clean_url):
-            return self._resolve_bandcamp_sources(clean_url, status_callback)
-        return [
-            DownloadSource(
-                page_url=clean_url, file_url=clean_url, title=self._title_from_url(clean_url)
-            )
-        ]
+        return self._registry.resolve(clean_url)
 
     def download_source(
         self,
@@ -111,145 +107,9 @@ class DownloaderService:
         if len(album_titles) != 1:
             return base_dir
 
-        album_dir = base_dir / self._safe_path_part(album_titles.pop())
+        album_dir = base_dir / safe_filename(album_titles.pop())
         album_dir.mkdir(parents=True, exist_ok=True)
         return album_dir
-
-    def _resolve_bandcamp_sources(
-        self,
-        url: str,
-        status_callback: Callable[[str], None] | None,
-    ) -> list[DownloadSource]:
-        self._emit_status(status_callback, "Resolving Bandcamp...")
-
-        try:
-            response = requests.get(url, timeout=30)
-            response.raise_for_status()
-        except requests.RequestException as error:
-            raise DownloadError(str(error)) from error
-
-        raw_tralbum = self._extract_data_attribute(response.text, "data-tralbum")
-        if not raw_tralbum:
-            raise DownloadError("Bandcamp track data was not found.")
-
-        try:
-            tralbum_data = json.loads(raw_tralbum)
-        except json.JSONDecodeError as error:
-            raise DownloadError("Bandcamp track data could not be parsed.") from error
-
-        trackinfo = self._bandcamp_trackinfo(tralbum_data)
-        artwork_url = self._extract_meta_property(response.text, "og:image")
-        og_title = self._extract_meta_property(response.text, "og:title")
-        album_title = self._bandcamp_album_title(tralbum_data, og_title)
-        is_album = len(trackinfo) > 1
-        sources: list[DownloadSource] = []
-
-        for index, track in enumerate(trackinfo, start=1):
-            file_url = self._bandcamp_mp3_url(track)
-            if not file_url:
-                continue
-
-            title = self._bandcamp_title(track)
-            track_number = self._bandcamp_track_number(track) or index
-            sources.append(
-                DownloadSource(
-                    page_url=self._bandcamp_track_url(url, track),
-                    file_url=file_url,
-                    title=title,
-                    filename=self._bandcamp_filename(track, track_number),
-                    artwork_url=artwork_url or None,
-                    track_number=track_number,
-                    album_title=album_title,
-                    is_album_track=is_album,
-                    artist=self._bandcamp_artist(tralbum_data, og_title)
-                )
-            )
-
-        if not sources:
-            raise DownloadError("No downloadable Bandcamp MP3 streams were found.")
-        return sources
-
-    def _bandcamp_trackinfo(self, tralbum_data: Mapping[str, Any]) -> list[Mapping[str, Any]]:
-        trackinfo = tralbum_data.get("trackinfo")
-        if not isinstance(trackinfo, list) or not trackinfo:
-            raise DownloadError("Bandcamp track list is empty.")
-
-        tracks = [
-            cast("Mapping[str, Any]", track) for track in trackinfo if isinstance(track, dict)
-        ]
-        if not tracks:
-            raise DownloadError("Bandcamp track data is invalid.")
-        return tracks
-
-    def _bandcamp_mp3_url(self, track: Mapping[str, Any]) -> str | None:
-        file_data = track.get("file")
-        if not isinstance(file_data, dict):
-            return None
-
-        mp3_url = file_data.get("mp3-128")
-        if not isinstance(mp3_url, str) or not mp3_url:
-            return None
-        return mp3_url
-
-    def _bandcamp_filename(
-        self,
-        track: Mapping[str, Any],
-        track_number: int | None,
-    ) -> str:
-        title = self._bandcamp_title(track)
-        return f"{self._safe_filename(title)}.mp3"
-
-    def _bandcamp_title(self, track: Mapping[str, Any]) -> str:
-        title = track.get("title")
-        if not isinstance(title, str) or not title.strip():
-            return "Bandcamp track"
-        return title.strip()
-
-    def _bandcamp_album_title(
-        self,
-        tralbum_data: Mapping[str, Any],
-        og_title: str,
-    ) -> str | None:
-        current = tralbum_data.get("current")
-        if isinstance(current, dict):
-            title = current.get("title")
-            if isinstance(title, str) and title.strip():
-                return title.strip()
-
-        if og_title:
-            return og_title
-        return None
-
-    def _bandcamp_track_number(self, track: Mapping[str, Any]) -> int | None:
-        track_number = track.get("track_num")
-        if isinstance(track_number, int):
-            return track_number
-        if isinstance(track_number, str) and track_number.isdigit():
-            return int(track_number)
-        return None
-
-    def _bandcamp_track_url(self, fallback_url: str, track: Mapping[str, Any]) -> str:
-        title_link = track.get("title_link")
-        if isinstance(title_link, str) and title_link:
-            parsed_url = urlparse(fallback_url)
-            return f"{parsed_url.scheme}://{parsed_url.netloc}{title_link}"
-        return fallback_url
-
-    def _extract_data_attribute(self, html: str, attribute: str) -> str:
-        match = re.search(rf'{attribute}=([\'"])(.*?)\1', html, flags=re.DOTALL)
-        if match is None:
-            return ""
-        return unescape(match.group(2))
-
-    def _extract_meta_property(self, html: str, property_name: str) -> str:
-        pattern = (
-            rf'<meta\s+[^>]*property=["\']{re.escape(property_name)}["\'][^>]*'
-            r'content=([\'"])(.*?)\1'
-        )
-        match = re.search(pattern, html, flags=re.IGNORECASE | re.DOTALL)
-        if match is None:
-            return ""
-        return unescape(match.group(2))
 
     def _build_file_path(
         self,
@@ -363,33 +223,6 @@ class DownloaderService:
         if parsed_url.scheme not in {"http", "https"} or not parsed_url.netloc:
             raise DownloadError("Paste a valid http or https link.")
 
-    def _is_bandcamp_url(self, url: str) -> bool:
-        hostname = urlparse(url).hostname or ""
-        return hostname == "bandcamp.com" or hostname.endswith(".bandcamp.com")
-
-    def _safe_filename(self, value: str) -> str:
-        filename = re.sub(r'[\\/:*?"<>|]+', "-", value.strip())
-        filename = re.sub(r"\s+", " ", filename)
-        return filename.strip(" .") or "download"
-
-    def _safe_path_part(self, value: str) -> str:
-        return self._safe_filename(value)
-
-    def _title_from_url(self, url: str) -> str:
-        path_name = unquote(Path(urlparse(url).path).name)
-        if path_name:
-            return path_name
-        return urlparse(url).netloc or "Download"
-
     def _emit_status(self, callback: Callable[[str], None] | None, status: str) -> None:
         if callback is not None:
             callback(status)
-
-    def _bandcamp_artist(self, tralbum_data: Mapping[str, Any], og_title: str) -> str | None:
-        artist = tralbum_data.get("artist")
-        if isinstance(artist, str) and artist.strip():
-            return artist.strip()
-
-        if og_title and " - " in og_title:
-            return og_title.split(" - ", 1)[0].strip()
-        return None
