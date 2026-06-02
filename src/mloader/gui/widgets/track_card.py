@@ -1,11 +1,12 @@
 from PySide6 import QtCore, QtGui, QtWidgets
 
+from mloader.downloader.service import DownloadSource
+
 
 class TrackCard(QtWidgets.QWidget):
     play_clicked = QtCore.Signal()
-    checked_changed = QtCore.Signal(bool)
 
-    def __init__(self, source, artwork: bytes, index: int, parent=None):
+    def __init__(self, source: DownloadSource, artwork: bytes, index: int, parent=None):
         super().__init__(parent)
 
         self.source = source
@@ -19,9 +20,6 @@ class TrackCard(QtWidgets.QWidget):
 
         self.checkbox = QtWidgets.QCheckBox()
         self.checkbox.setChecked(True)
-        self.checkbox.stateChanged.connect(
-            lambda _: self.checked_changed.emit(self.checkbox.isChecked())
-        )
 
         self.play_button = QtWidgets.QPushButton("Play")
         self.play_button.setObjectName("playButton")
@@ -41,9 +39,9 @@ class TrackCard(QtWidgets.QWidget):
         self.title_label = QtWidgets.QLabel(title)
         self.title_label.setObjectName("trackTitle")
 
-        self.detail_label = QtWidgets.QLabel(source.page_url)
-        self.detail_label.setObjectName("trackUrl")
-        self.detail_label.setWordWrap(True)
+        self._detail_label = QtWidgets.QLabel(source.page_url)
+        self._detail_label.setObjectName("trackUrl")
+        self._detail_label.setWordWrap(True)
 
         self.status_label = QtWidgets.QLabel("Ready")
         self.status_label.setObjectName("trackStatus")
@@ -53,7 +51,7 @@ class TrackCard(QtWidgets.QWidget):
         text_layout.setContentsMargins(0, 0, 0, 0)
         text_layout.setSpacing(6)
         text_layout.addWidget(self.title_label)
-        text_layout.addWidget(self.detail_label)
+        text_layout.addWidget(self._detail_label)
         text_layout.addStretch(1)
 
         layout.addWidget(self.checkbox)
@@ -82,8 +80,8 @@ class TrackCard(QtWidgets.QWidget):
     def set_status(self, text: str):
         self.status_label.setText(text)
 
-    def set_text(self, text: str):
-        self.title_label.setText(text)
+    def set_detail(self, text: str) -> None:
+        self._detail_label.setText(text)
 
     def set_playing(self, is_playing: bool):
         self.play_button.setText("Pause" if is_playing else "Play")

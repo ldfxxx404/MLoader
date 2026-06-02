@@ -177,7 +177,7 @@ class DownloaderService:
                     page_url=self._bandcamp_track_url(url, track),
                     file_url=file_url,
                     title=title,
-                    filename=self._bandcamp_filename(track, track_number, False),
+                    filename=self._bandcamp_filename(track, track_number),
                     artwork_url=artwork_url or None,
                     track_number=track_number,
                     album_title=album_title,
@@ -216,11 +216,8 @@ class DownloaderService:
         self,
         track: Mapping[str, Any],
         track_number: int | None,
-        include_number: bool,
     ) -> str:
         title = self._bandcamp_title(track)
-        if include_number and track_number is not None:
-            return f"{track_number:02d} - {self._safe_filename(title)}.mp3"
         return f"{self._safe_filename(title)}.mp3"
 
     def _bandcamp_title(self, track: Mapping[str, Any]) -> str:
