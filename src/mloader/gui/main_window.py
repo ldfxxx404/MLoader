@@ -1,5 +1,5 @@
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
 
 from PySide6 import QtCore, QtGui, QtWidgets
 
@@ -11,13 +11,19 @@ from mloader.gui.widgets.track_card import TrackCard
 from mloader.player.service import PlayerService
 
 
+@dataclass
+class _CardEntry:
+    item: QtWidgets.QListWidgetItem
+    card: TrackCard
+
+
 class MainWindow(QtWidgets.QMainWindow):
     def __init__(self) -> None:
         super().__init__()
         self._downloader = DownloaderService()
         self._download_dir = self._downloader.download_dir
         self._sources: list[DownloadSource] = []
-        self._track_cards: list[dict[str, Any]] = []
+        self._track_cards: list[_CardEntry] = []
         self._player_service = PlayerService(self)
         self._scan_service = ScanService(self._downloader, self)
         self._download_service = DownloadService(self._downloader, self)
@@ -171,12 +177,12 @@ class MainWindow(QtWidgets.QMainWindow):
         self._player_service.stop()
         selected_sources = [self._sources[index] for index in selected_indexes]
         for card_index, entry in enumerate(self._track_cards):
-            entry["card"].set_enabled_controls(False)
+            entry.card.set_enabled_controls(False)
 
             if card_index in selected_indexes:
-                entry["card"].set_status("Waiting")
+                entry.card.set_status("Waiting")
             else:
-                entry["card"].set_status("Skipped")
+                entry.card.set_status("Skipped")
 
         self.progress_bar.setValue(0)
         self._set_status("Downloading selected tracks...")
@@ -200,28 +206,28 @@ class MainWindow(QtWidgets.QMainWindow):
         self.progress_bar.setValue(100)
         self._set_busy(False)
         for entry in self._track_cards:
-            entry["card"].set_enabled_controls(True)
+            entry.card.set_enabled_controls(True)
         self.download_button.setEnabled(bool(self._sources))
 
     def _track_progress_changed(self, selected_index: int, progress: int) -> None:
         card_index = self._selected_indexes()[selected_index]
-        self._track_cards[card_index]["card"].set_status(f"{progress}%")
+        self._track_cards[card_index].card.set_status(f"{progress}%")
 
     def _track_finished(self, selected_index: int, file_path: str) -> None:
         card_index = self._selected_indexes()[selected_index]
-        card = self._track_cards[card_index]["card"]
+        card = self._track_cards[card_index].card
         card.set_status("Saved")
-        card.detail_label.setText(file_path)
+        card.set_detail(file_path)
 
     def _track_failed(self, selected_index: int, message: str) -> None:
         card_index = self._selected_indexes()[selected_index]
-        card = self._track_cards[card_index]["card"]
+        card = self._track_cards[card_index].card
         card.set_status("Failed")
-        card.detail_label.setText(message)
+        card.set_detail(message)
 
     def _set_selected_card_status(self, selected_index: int, status: str) -> None:
         card_index = self._selected_indexes()[selected_index]
-        self._track_cards[card_index]["card"].set_status(status)
+        self._track_cards[card_index].card.set_status(status)
 
     def _add_download_card(self, source: DownloadSource, artwork: bytes) -> None:
         if self.queue_list.count() == 1 and self.queue_list.item(0) is self._empty_item:
@@ -240,7 +246,7 @@ class MainWindow(QtWidgets.QMainWindow):
             lambda idx=index: self._player_service.toggle(self._sources[idx].file_url, idx)
         )
 
-        self._track_cards.append({"item": item, "card": card})
+        self._track_cards.append(_CardEntry(item=item, card=card))
 
     def _clear_tracks(self) -> None:
         self._player_service.stop()
@@ -252,7 +258,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.download_button.setEnabled(False)
 
     def _selected_indexes(self) -> list[int]:
-        return [i for i, entry in enumerate(self._track_cards) if entry["card"].is_selected()]
+        return [i for i, entry in enumerate(self._track_cards) if entry.card.is_selected()]
 
     def _set_busy(self, is_busy: bool, scanning: bool = False) -> None:
         self.link_input.setEnabled(not is_busy)
@@ -269,34 +275,34 @@ class MainWindow(QtWidgets.QMainWindow):
     def _set_status(self, status: str) -> None:
         self.status_label.setText(status)
 
-    def _on_playing_index_changed(self, index: int | None) -> None:
+    def _on_playing_index_changed(self, index: int) -> None:
         for entry in self._track_cards:
-            entry["card"].set_playing(False)
-            entry["card"].set_status("Ready")
+            entry.card.set_playing(False)
+            entry.card.set_status("Ready")
 
-        if index is not None and index < len(self._sources):
+        if index != -1 and index < len(self._sources):
             self.player_bar.set_title(self._sources[index].title)
         else:
             self.player_bar.set_title("No preview playing")
 
     def _on_card_state_changed(self, state: int) -> None:
-        if self._player_service.playing_index is None:
+        if self._player_service.playing_index == -1:
             for entry in self._track_cards:
-                entry["card"].set_playing(False)
-                entry["card"].set_status("Ready")
+                entry.card.set_playing(False)
+                entry.card.set_status("Ready")
             return
 
         if state == 0:
             for entry in self._track_cards:
-                entry["card"].set_playing(False)
-                entry["card"].set_status("Ready")
+                entry.card.set_playing(False)
+                entry.card.set_status("Ready")
             self._play_next()
             return
 
         idx = self._player_service.playing_index
         if idx >= len(self._track_cards):
             return
-        card = self._track_cards[idx]["card"]
+        card = self._track_cards[idx].card
         is_playing = state == 1
         card.set_playing(is_playing)
         status_map = {0: "Ready", 1: "Playing", 2: "Paused"}
@@ -304,7 +310,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def _play_next(self) -> None:
         current = self._player_service.playing_index
-        if current is None:
+        if current == -1:
             return
         next_index = current + 1
         if next_index < len(self._sources):
@@ -317,10 +323,10 @@ class MainWindow(QtWidgets.QMainWindow):
         super().closeEvent(event)
 
     def _on_player_error(self, _error: str) -> None:
-        if self._player_service.playing_index is not None:
+        if self._player_service.playing_index != -1:
             idx = self._player_service.playing_index
             if idx < len(self._track_cards):
-                card = self._track_cards[idx]["card"]
+                card = self._track_cards[idx].card
                 card.set_status("Preview failed")
                 card.set_playing(False)
         self.player_bar.set_title("Preview failed")

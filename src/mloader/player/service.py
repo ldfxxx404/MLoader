@@ -2,14 +2,14 @@ from PySide6 import QtCore, QtMultimedia
 
 
 class PlayerService(QtCore.QObject):
-    playing_index_changed = QtCore.Signal(object)
+    playing_index_changed = QtCore.Signal(int)
     playback_state_changed = QtCore.Signal(int)
     player_error = QtCore.Signal(str)
     position_changed = QtCore.Signal(int, int)
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.playing_index: int | None = None
+        self.playing_index: int = -1
         self._starting = False
         self._audio_output = QtMultimedia.QAudioOutput(self)
         self._player = QtMultimedia.QMediaPlayer(self)
@@ -49,8 +49,8 @@ class PlayerService(QtCore.QObject):
     def stop(self) -> None:
         self._player.stop()
         self._player.setSource(QtCore.QUrl())
-        self.playing_index = None
-        self.playing_index_changed.emit(None)
+        self.playing_index = -1
+        self.playing_index_changed.emit(-1)
         self.playback_state_changed.emit(0)
 
     def seek(self, position: int) -> None:
