@@ -2,6 +2,7 @@ import logging
 from pathlib import Path
 import sys
 
+from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QApplication
 
 from mloader.gui.main_window import MainWindow
@@ -14,6 +15,7 @@ def main() -> int:
     )
 
     app = QApplication(sys.argv)
+    app.setWindowIcon(QIcon(str(Path(__file__).parent / "gui" / "MLoaderIcon.png")))
 
     qss_file_path = Path(__file__).parent / "gui" / "styles" / "dark.qss"
     app.setStyleSheet(qss_file_path.read_text(encoding="utf-8"))
