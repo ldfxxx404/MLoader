@@ -34,6 +34,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self._download_service = DownloadService(self._downloader, self)
 
         self.setWindowTitle("MLoader")
+        self.setWindowIcon(QtGui.QIcon(str(Path(__file__).parent / "MLoaderIcon.png")))
         self.resize(920, 620)
         self.setMinimumSize(720, 500)
 
