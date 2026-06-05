@@ -38,8 +38,9 @@ class GenericResolver(SourceResolver):
 class ResolverRegistry:
     """Holds and dispatches to registered source resolvers."""
 
-    def __init__(self) -> None:
+    def __init__(self, fallback_resolver: SourceResolver | None = None) -> None:
         self._resolvers: list[SourceResolver] = []
+        self._fallback = fallback_resolver
 
     def register(self, resolver: SourceResolver) -> None:
         self._resolvers.append(resolver)
@@ -52,4 +53,6 @@ class ResolverRegistry:
         for resolver in self._resolvers:
             if resolver.supports(clean_url):
                 return resolver.resolve(clean_url)
+        if self._fallback:
+            return self._fallback.resolve(clean_url)
         raise DownloadError(f"No resolver available for URL: {url}")

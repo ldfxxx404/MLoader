@@ -18,10 +18,15 @@ class ResolveWorker(QtCore.QObject):
     def run(self) -> None:
         try:
             sources = self._service.resolve(self._url, self.status_changed.emit)
-            previews = [
-                (source, self._service.download_artwork(source.artwork_url))
-                for source in sources
-            ]
+            artwork_cache = {}
+            previews = []
+            for source in sources:
+                if QtCore.QThread.currentThread().isInterruptionRequested():
+                    return
+                url = source.artwork_url
+                if url not in artwork_cache:
+                    artwork_cache[url] = self._service.download_artwork(url)
+                previews.append((source, artwork_cache[url]))
         except DownloadError as error:
             self.failed.emit(str(error))
             return
@@ -29,4 +34,6 @@ class ResolveWorker(QtCore.QObject):
             self.failed.emit(f"Unexpected error: {error}")
             return
 
+        if QtCore.QThread.currentThread().isInterruptionRequested():
+            return
         self.resolved.emit(previews)

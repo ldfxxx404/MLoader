@@ -58,11 +58,10 @@ class DownloadService(QtCore.QObject):
 
     def stop(self) -> None:
         if self._thread is not None:
+            self._thread.requestInterruption()
             self._thread.quit()
-            if not self._thread.wait(5000):
-                log.warning("Download thread did not finish in time, terminating")
-                self._thread.terminate()
-                self._thread.wait()
+            if not self._thread.wait(1000):
+                log.warning("Download thread did not finish in time gracefully, cleaning up")
             self._clear()
 
     def _on_worker_status(self, status: str) -> None:

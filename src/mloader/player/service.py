@@ -38,16 +38,13 @@ class PlayerService(QtCore.QObject):
         self._starting = True
         self._player.setSource(QtCore.QUrl(url))
         self._player.play()
-        self.playback_state_changed.emit(1)
 
     def toggle(self, url: str, index: int) -> None:
         if self.playing_index == index:
             if self._player.playbackState() == QtMultimedia.QMediaPlayer.PlaybackState.PlayingState:
                 self._player.pause()
-                self.playback_state_changed.emit(2)
             else:
                 self._player.play()
-                self.playback_state_changed.emit(1)
         else:
             self.play(url, index)
 
@@ -56,7 +53,6 @@ class PlayerService(QtCore.QObject):
         self._player.setSource(QtCore.QUrl())
         self.playing_index = -1
         self.playing_index_changed.emit(-1)
-        self.playback_state_changed.emit(0)
 
     def set_volume(self, vol: int) -> None:
         vol = max(0, min(100, vol))

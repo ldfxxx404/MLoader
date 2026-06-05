@@ -24,9 +24,14 @@ class _CardEntry:
 class MainWindow(QtWidgets.QMainWindow):
     def __init__(self) -> None:
         super().__init__()
-        QtWidgets.QApplication.instance().installEventFilter(self)
         self._downloader = DownloaderService()
-        self._download_dir = self._downloader.download_dir
+        
+        settings = QtCore.QSettings("MLoader", "MLoaderApp")
+        saved_dir = settings.value("download_dir", "")
+        if saved_dir:
+            self._download_dir = Path(saved_dir)
+        else:
+            self._download_dir = self._downloader.download_dir
         self._sources: list[DownloadSource] = []
         self._track_cards: list[_CardEntry] = []
         self._player_service = PlayerService(self)
@@ -153,6 +158,27 @@ class MainWindow(QtWidgets.QMainWindow):
         self.link_input.returnPressed.connect(self._scan_link)
         self.select_all_button.clicked.connect(self._toggle_select_all)
 
+        # Setup shortcuts dynamically managed by focus
+        self._shortcut_left = QtGui.QShortcut(QtGui.QKeySequence(QtCore.Qt.Key.Key_Left), self)
+        self._shortcut_left.activated.connect(lambda: self._player_service.seek_relative(-20000))
+
+        self._shortcut_right = QtGui.QShortcut(QtGui.QKeySequence(QtCore.Qt.Key.Key_Right), self)
+        self._shortcut_right.activated.connect(lambda: self._player_service.seek_relative(20000))
+
+        self._shortcut_up = QtGui.QShortcut(QtGui.QKeySequence(QtCore.Qt.Key.Key_Up), self)
+        self._shortcut_up.activated.connect(lambda: self._player_service.set_volume(self._player_service.volume() + 10))
+
+        self._shortcut_down = QtGui.QShortcut(QtGui.QKeySequence(QtCore.Qt.Key.Key_Down), self)
+        self._shortcut_down.activated.connect(lambda: self._player_service.set_volume(self._player_service.volume() - 10))
+
+        self._shortcut_space = QtGui.QShortcut(QtGui.QKeySequence(QtCore.Qt.Key.Key_Space), self)
+        self._shortcut_space.activated.connect(self._toggle_playback)
+
+        self._shortcut_select_all = QtGui.QShortcut(QtGui.QKeySequence("Ctrl+A"), self)
+        self._shortcut_select_all.activated.connect(self._toggle_select_all)
+
+        QtWidgets.QApplication.instance().focusChanged.connect(self._on_focus_changed)
+
     def _scan_link(self) -> None:
         url = self.link_input.text().strip()
         if not url:
@@ -228,6 +254,9 @@ class MainWindow(QtWidgets.QMainWindow):
 
         self._download_dir = Path(directory)
         self.destination_label.setText(str(self._download_dir))
+        
+        settings = QtCore.QSettings("MLoader", "MLoaderApp")
+        settings.setValue("download_dir", str(self._download_dir))
 
     def _downloads_finished(self) -> None:
         self._set_status("Done")
@@ -368,37 +397,16 @@ class MainWindow(QtWidgets.QMainWindow):
         if next_index < len(self._sources):
             self._player_service.toggle(self._sources[next_index].file_url, next_index)
 
-    def eventFilter(self, obj: QtCore.QObject, event: QtCore.QEvent) -> bool:  # noqa: N802
-        if event.type() == QtCore.QEvent.Type.KeyPress:
-            key = event.key()
-            focused = QtWidgets.QApplication.instance().focusWidget()
-            in_text_input = focused is not None and isinstance(focused, QtWidgets.QLineEdit)
-            is_button = isinstance(obj, QtWidgets.QAbstractButton)
+    def _on_focus_changed(self, old: QtWidgets.QWidget | None, new: QtWidgets.QWidget | None) -> None:
+        in_text_input = new is not None and isinstance(new, QtWidgets.QLineEdit)
+        is_button = new is not None and isinstance(new, QtWidgets.QAbstractButton)
 
-            if key == QtCore.Qt.Key.Key_Left and not in_text_input:
-                self._player_service.seek_relative(-20000)
-                return True
-            if key == QtCore.Qt.Key.Key_Right and not in_text_input:
-                self._player_service.seek_relative(20000)
-                return True
-            if key == QtCore.Qt.Key.Key_Up and not in_text_input:
-                self._player_service.set_volume(self._player_service.volume() + 10)
-                return True
-            if key == QtCore.Qt.Key.Key_Down and not in_text_input:
-                self._player_service.set_volume(self._player_service.volume() - 10)
-                return True
-            if key == QtCore.Qt.Key.Key_Space and not (in_text_input or is_button):
-                self._toggle_playback()
-                return True
-            if (
-                key == QtCore.Qt.Key.Key_A
-                and event.modifiers() == QtCore.Qt.KeyboardModifier.ControlModifier
-                and not in_text_input
-            ):
-                self._toggle_select_all()
-                return True
-
-        return super().eventFilter(obj, event)
+        self._shortcut_left.setEnabled(not in_text_input)
+        self._shortcut_right.setEnabled(not in_text_input)
+        self._shortcut_up.setEnabled(not in_text_input)
+        self._shortcut_down.setEnabled(not in_text_input)
+        self._shortcut_space.setEnabled(not (in_text_input or is_button))
+        self._shortcut_select_all.setEnabled(not in_text_input)
 
     def _toggle_playback(self) -> None:
         idx = self._player_service.playing_index

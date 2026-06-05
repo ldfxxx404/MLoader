@@ -46,6 +46,45 @@ class TestRun:
         service.download_artwork.assert_called_once_with("http://example.com/art.jpg")
         failed.assert_not_called()
 
+    def test_resolved_with_multiple_tracks_deduplicates_artwork(self):
+        service = Mock()
+        service.download_artwork.return_value = b"shared_image_data"
+        sources = [
+            Mock(artwork_url="http://example.com/shared.jpg"),
+            Mock(artwork_url="http://example.com/shared.jpg"),
+            Mock(artwork_url="http://example.com/shared.jpg"),
+        ]
+        service.resolve.return_value = sources
+
+        worker = ResolveWorker(service=service, url="http://example.com")
+        resolved = Mock()
+        worker.resolved.connect(resolved)
+
+        worker.run()
+
+        resolved.assert_called_once()
+        service.download_artwork.assert_called_once_with("http://example.com/shared.jpg")
+
+    def test_resolve_interrupted(self, monkeypatch):
+        service = Mock()
+        sources = [Mock(artwork_url="http://example.com/art.jpg")]
+        service.resolve.return_value = sources
+
+        worker = ResolveWorker(service=service, url="http://example.com")
+        resolved = Mock()
+        worker.resolved.connect(resolved)
+
+        mock_thread = Mock()
+        mock_thread.isInterruptionRequested.return_value = True
+        
+        from PySide6.QtCore import QThread
+        monkeypatch.setattr(QThread, "currentThread", lambda: mock_thread)
+
+        worker.run()
+
+        resolved.assert_not_called()
+        service.download_artwork.assert_not_called()
+
     def test_download_error(self):
         service = Mock()
         service.resolve.side_effect = DownloadError("broken")

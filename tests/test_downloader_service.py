@@ -226,6 +226,22 @@ class TestDownloadArtwork:
                 headers={"User-Agent": "MLoader/0.2.0"},
             )
 
+    def test_artwork_cache(self):
+        svc = DownloaderService()
+        with patch("requests.get") as mock_get:
+            resp = Mock()
+            resp.content = b"cached_image_data"
+            resp.raise_for_status.return_value = None
+            mock_get.return_value = resp
+
+            # First call should trigger requests.get
+            assert svc.download_artwork("http://example.com/art.jpg") == b"cached_image_data"
+            assert mock_get.call_count == 1
+
+            # Second call should use cached data, not triggering requests.get again
+            assert svc.download_artwork("http://example.com/art.jpg") == b"cached_image_data"
+            assert mock_get.call_count == 1
+
 
 class TestBandcampResolverSupports:
     def test_bandcamp_com(self):

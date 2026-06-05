@@ -58,6 +58,40 @@ class TestRun:
         track_failed.assert_called_once_with(0, "error")
         finished.assert_called_once()
 
+    def test_download_interrupted(self, monkeypatch):
+        service = Mock()
+        source = Mock()
+        tmpdir = gettempdir()
+
+        service.download_dir_for_sources.return_value = Path(tmpdir)
+
+        worker = DownloadWorker(
+            service=service,
+            sources=[source],
+            download_dir=Path("/Downloads/MLoader"),
+        )
+
+        track_finished = Mock()
+        finished = Mock()
+        track_started = Mock()
+
+        worker.track_finished.connect(track_finished)
+        worker.finished.connect(finished)
+        worker.track_started.connect(track_started)
+
+        mock_thread = Mock()
+        mock_thread.isInterruptionRequested.return_value = True
+        
+        from PySide6.QtCore import QThread
+        monkeypatch.setattr(QThread, "currentThread", lambda: mock_thread)
+
+        worker.run()
+
+        track_started.assert_not_called()
+        service.download_source.assert_not_called()
+        track_finished.assert_not_called()
+        finished.assert_called_once()
+
 
 class TestEmitTrackProgress:
     def test_emit_track_progress(self):

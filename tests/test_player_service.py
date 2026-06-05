@@ -33,4 +33,9 @@ class TestRun:
 
         mock_player.play.assert_called_once()
 
+        # Simulate the asynchronous callback from QMediaPlayer
+        mock_state = Mock()
+        mock_state.value = 1
+        service._on_state_changed(mock_state)
+
         playback_state_changed.assert_called_once_with(1)

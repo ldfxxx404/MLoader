@@ -21,9 +21,9 @@ log = logging.getLogger(__name__)
 class DownloaderService:
     def __init__(self, download_dir: Path | None = None) -> None:
         self.download_dir = download_dir or Path.home() / "Downloads" / "MLoader"
-        self._registry = ResolverRegistry()
+        self._registry = ResolverRegistry(fallback_resolver=GenericResolver())
         self._registry.register(BandcampResolver())
-        self._registry.register(GenericResolver())
+        self._artwork_cache: dict[str, bytes] = {}
 
     def download(
         self,
@@ -31,6 +31,7 @@ class DownloaderService:
         progress_callback: Callable[[int], None] | None = None,
         status_callback: Callable[[str], None] | None = None,
         preview_callback: Callable[[DownloadSource], None] | None = None,
+        is_cancelled_callback: Callable[[], bool] | None = None,
     ) -> DownloadResult:
         clean_url = url.strip()
         self._validate_url(clean_url)
@@ -40,7 +41,12 @@ class DownloaderService:
         if preview_callback is not None:
             preview_callback(source)
 
-        return self.download_source(source, progress_callback, status_callback)
+        return self.download_source(
+            source,
+            progress_callback,
+            status_callback,
+            is_cancelled_callback=is_cancelled_callback,
+        )
 
     def resolve(
         self,
@@ -57,11 +63,13 @@ class DownloaderService:
         progress_callback: Callable[[int], None] | None = None,
         status_callback: Callable[[str], None] | None = None,
         target_dir: Path | None = None,
+        is_cancelled_callback: Callable[[], bool] | None = None,
     ) -> DownloadResult:
         download_dir = target_dir or self.download_dir
         download_dir.mkdir(parents=True, exist_ok=True)
         self._emit_status(status_callback, "Connecting...")
 
+        file_path = None
         try:
             log.info("Downloading %s", source.file_url)
             with requests.get(
@@ -84,6 +92,8 @@ class DownloaderService:
                 self._emit_status(status_callback, "Downloading...")
                 with file_path.open("wb") as file:
                     for chunk in response.iter_content(chunk_size=1024 * 64):
+                        if is_cancelled_callback is not None and is_cancelled_callback():
+                            raise DownloadError("Download cancelled")
                         if not chunk:
                             continue
 
@@ -95,11 +105,13 @@ class DownloaderService:
 
             log.info("Saved %s (%d bytes)", file_path, downloaded_size)
 
-        except requests.RequestException as error:
+        except (requests.RequestException, OSError, DownloadError) as error:
             log.error("Download failed: %s", error)
-            raise DownloadError(str(error)) from error
-        except OSError as error:
-            log.error("File write failed: %s", error)
+            if file_path and file_path.exists():
+                try:
+                    file_path.unlink()
+                except OSError as unlink_err:
+                    log.warning("Failed to delete incomplete file %s: %s", file_path, unlink_err)
             raise DownloadError(str(error)) from error
 
         self._embed_metadata(file_path, source)
@@ -161,7 +173,6 @@ class DownloaderService:
         try:
             from mutagen import MutagenError
             from mutagen.id3 import APIC, ID3, TALB, TIT2, TPE1, TRCK, ID3NoHeaderError
-            from mutagen.mp3 import MP3
         except ImportError:
             log.debug("mutagen not available, skipping metadata embedding")
             return
@@ -201,7 +212,6 @@ class DownloaderService:
                 )
 
             tags.save(file_path, v2_version=3)
-            MP3(file_path).save()
             log.debug("Metadata embedded in %s", file_path)
         except (MutagenError, OSError) as meta_error:
             log.warning("Failed to embed metadata in %s: %s", file_path, meta_error)
@@ -209,6 +219,10 @@ class DownloaderService:
     def download_artwork(self, artwork_url: str | None) -> bytes:
         if not artwork_url:
             return b""
+
+        if artwork_url in self._artwork_cache:
+            log.debug("Artwork retrieved from cache")
+            return self._artwork_cache[artwork_url]
 
         try:
             response = requests.get(
@@ -222,6 +236,7 @@ class DownloaderService:
             return b""
 
         log.debug("Artwork downloaded (%d bytes)", len(response.content))
+        self._artwork_cache[artwork_url] = response.content
         return response.content
 
     def _artwork_mime_type(self, artwork: bytes) -> str:

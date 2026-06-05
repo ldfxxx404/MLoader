@@ -31,6 +31,8 @@ class DownloadWorker(QtCore.QObject):
         total = len(self._sources)
         target_dir = self._service.download_dir_for_sources(self._download_dir, self._sources)
         for index, source in enumerate(self._sources):
+            if QtCore.QThread.currentThread().isInterruptionRequested():
+                break
             self.track_started.emit(index)
 
             try:
@@ -43,12 +45,17 @@ class DownloadWorker(QtCore.QObject):
                     ),
                     status_callback=self.status_changed.emit,
                     target_dir=target_dir,
+                    is_cancelled_callback=lambda: QtCore.QThread.currentThread().isInterruptionRequested(),
                 )
             except DownloadError as error:
                 self.track_failed.emit(index, str(error))
+                if QtCore.QThread.currentThread().isInterruptionRequested():
+                    break
                 continue
             except Exception as error:
                 self.track_failed.emit(index, f"Unexpected error: {error}")
+                if QtCore.QThread.currentThread().isInterruptionRequested():
+                    break
                 continue
 
             self.track_finished.emit(index, str(result.file_path))
