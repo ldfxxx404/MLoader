@@ -29,10 +29,11 @@ class MainWindow(QtWidgets.QMainWindow):
         settings = QtCore.QSettings("MLoader", "MLoaderApp")
         saved_dir = settings.value("download_dir", "")
         if saved_dir:
-            self._download_dir = Path(saved_dir)
+            self._download_dir = Path(str(saved_dir))
         else:
             self._download_dir = self._downloader.download_dir
         self._sources: list[DownloadSource] = []
+        self._last_scanned_url: str = ""
         self._track_cards: list[_CardEntry] = []
         self._player_service = PlayerService(self)
         self._scan_service = ScanService(self._downloader, self)
@@ -69,8 +70,6 @@ class MainWindow(QtWidgets.QMainWindow):
 
         self.scan_button = QtWidgets.QPushButton("Scan")
         self.scan_button.setMinimumHeight(38)
-        self.scan_button.setDefault(True)
-
         self.download_button = QtWidgets.QPushButton("Download selected")
         self.download_button.setMinimumHeight(38)
         self.download_button.setEnabled(False)
@@ -155,7 +154,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.scan_button.clicked.connect(self._scan_link)
         self.download_button.clicked.connect(self._download_selected)
         self.browse_button.clicked.connect(self._choose_download_dir)
-        self.link_input.returnPressed.connect(self._scan_link)
+        self.link_input.returnPressed.connect(self._on_return_pressed)
         self.select_all_button.clicked.connect(self._toggle_select_all)
 
         # Setup shortcuts dynamically managed by focus
@@ -177,7 +176,12 @@ class MainWindow(QtWidgets.QMainWindow):
         self._shortcut_select_all = QtGui.QShortcut(QtGui.QKeySequence("Ctrl+A"), self)
         self._shortcut_select_all.activated.connect(self._toggle_select_all)
 
-        QtWidgets.QApplication.instance().focusChanged.connect(self._on_focus_changed)
+        self._shortcut_enter = QtGui.QShortcut(QtGui.QKeySequence(QtCore.Qt.Key.Key_Return), self)
+        self._shortcut_enter.activated.connect(self._on_enter_global)
+
+        app = QtWidgets.QApplication.instance()
+        if isinstance(app, QtWidgets.QApplication):
+            app.focusChanged.connect(self._on_focus_changed)
 
     def _scan_link(self) -> None:
         url = self.link_input.text().strip()
@@ -194,7 +198,19 @@ class MainWindow(QtWidgets.QMainWindow):
         self.progress_bar.setValue(0)
         self._set_status("Scanning...")
         self._set_busy(True, scanning=True)
+        self._last_scanned_url = url
         self._scan_service.scan(url)
+
+    def _on_return_pressed(self) -> None:
+        if self._sources and self.link_input.text().strip() == self._last_scanned_url:
+            self._download_selected()
+        else:
+            self._scan_link()
+
+    def _on_enter_global(self) -> None:
+        if not self._sources or self._scan_service.is_busy or self._download_service.is_busy:
+            return
+        self._download_selected()
 
     def _scan_finished(self, previews: list[tuple[DownloadSource, bytes]]) -> None:
         self._sources = [source for source, _artwork in previews]
@@ -212,6 +228,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.select_all_button.setEnabled(True)
         self.select_all_button.setText("Deselect All")
         self._set_busy(False)
+        self.link_input.setFocus()
 
     def _scan_failed(self, message: str) -> None:
         self._set_status(f"Error: {message}")
@@ -407,6 +424,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self._shortcut_down.setEnabled(not in_text_input)
         self._shortcut_space.setEnabled(not (in_text_input or is_button))
         self._shortcut_select_all.setEnabled(not in_text_input)
+        self._shortcut_enter.setEnabled(not in_text_input)
 
     def _toggle_playback(self) -> None:
         idx = self._player_service.playing_index
