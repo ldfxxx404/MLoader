@@ -27,6 +27,7 @@ source mloader_venv/bin/activate  # Linux/macOS
 
 # Install dependencies
 pip install -r requirements.txt
+pip install -e .
 ```
 
 ### Running the Application
